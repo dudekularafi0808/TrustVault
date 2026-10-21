@@ -11,6 +11,65 @@ from werkzeug.utils import secure_filename
 from flask import Flask, request, jsonify, session, send_file, send_from_directory
 
 import database
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+def get_smtp_config():
+    server = os.environ.get("SMTP_SERVER", "").strip()
+    port_raw = os.environ.get("SMTP_PORT", "587").strip()
+    try:
+        port = int(port_raw)
+    except ValueError:
+        port = 587
+    username = os.environ.get("SMTP_USERNAME", "").strip()
+    password = os.environ.get("SMTP_PASSWORD", "").strip()
+    sender = os.environ.get("SMTP_SENDER", "").strip() or username or "no-reply@trustvault.security"
+    use_tls = os.environ.get("SMTP_USE_TLS", "true").lower() in ("true", "1", "yes")
+    configured = bool(server and password)
+    return {
+        "configured": configured,
+        "server": server,
+        "port": port,
+        "username": username,
+        "password": password,
+        "sender": sender,
+        "use_tls": use_tls
+    }
+
+def send_email_notification(recipient, subject, text_content, html_content=None):
+    """
+    Delivers a real transactional security email via SMTP (e.g. Gmail, SendGrid, Outlook, SES).
+    Falls back gracefully if SMTP credentials are not configured in environment variables.
+    """
+    cfg = get_smtp_config()
+    if not cfg["configured"]:
+        return False, "SMTP not configured (SMTP_SERVER or SMTP_PASSWORD missing). Simulated delivery recorded."
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = cfg["sender"]
+        msg["To"] = recipient
+
+        msg.attach(MIMEText(text_content, "plain", "utf-8"))
+        if html_content:
+            msg.attach(MIMEText(html_content, "html", "utf-8"))
+
+        if cfg["port"] == 465:
+            with smtplib.SMTP_SSL(cfg["server"], cfg["port"], timeout=10) as s:
+                s.login(cfg["username"], cfg["password"])
+                s.send_message(msg)
+        else:
+            with smtplib.SMTP(cfg["server"], cfg["port"], timeout=10) as s:
+                if cfg["use_tls"]:
+                    s.starttls()
+                s.login(cfg["username"], cfg["password"])
+                s.send_message(msg)
+
+        return True, f"Email delivered successfully to {recipient} via {cfg['server']}:{cfg['port']}"
+    except Exception as e:
+        return False, f"SMTP delivery error: {str(e)}"
 
 app = Flask(__name__, static_folder="static", static_url_path="")
 app.secret_key = "TRUSTVAULT_SESSION_SECRET_KEY_v2026_SECURITY_GRADE"
@@ -233,6 +292,42 @@ def auth_signup():
         details={"email": email, "role": role, "title": title}
     )
 
+    # Send welcome email if SMTP is configured (non-blocking)
+    welcome_subject = f"Welcome to TrustVault Zero-Trust Security - {role.upper()}"
+    welcome_body = f"""Welcome to TrustVault, {full_name}!
+
+Your identity has been registered in the TrustVault security directory.
+- Role: {role.upper()}
+- Username: {username}
+- Registered Email: {email}
+- Assigned Title: {title}
+
+You can log in at any time with your credentials.
+Every document interaction is protected by server-enforced RBAC and recorded in the SHA-256 audit ledger.
+"""
+    welcome_html = f"""<!DOCTYPE html>
+<html>
+<body style="font-family:sans-serif; background-color:#f8fafc; color:#0f172a; padding:24px;">
+  <div style="max-width:560px; margin:0 auto; background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden;">
+    <div style="background:#1e40af; color:#ffffff; padding:24px; text-align:center;">
+      <h1 style="margin:0; font-size:20px; font-weight:700;">TRUSTVAULT ZERO-TRUST SECURITY</h1>
+      <p style="margin:6px 0 0; font-size:13px; color:#93c5fd;">Cryptographic Access Management Platform</p>
+    </div>
+    <div style="padding:28px;">
+      <h2 style="font-size:17px; margin-top:0; color:#1e293b;">Welcome to TrustVault, {full_name}!</h2>
+      <p style="font-size:14px; color:#334155;">Your secure identity has been registered with role: <strong>{role.upper()}</strong></p>
+      <ul style="font-size:13px; color:#475569; line-height:1.8;">
+        <li><strong>Username:</strong> {username}</li>
+        <li><strong>Email:</strong> {email}</li>
+        <li><strong>Title:</strong> {title}</li>
+      </ul>
+      <p style="font-size:13px; color:#64748b;">All document interactions are cryptographically verified and recorded in the immutable SHA-256 audit ledger.</p>
+    </div>
+  </div>
+</body>
+</html>"""
+    send_email_notification(email, welcome_subject, welcome_body, welcome_html)
+
     return jsonify({
         "message": f"Account created successfully for {full_name} ({role})",
         "user": {
@@ -437,6 +532,49 @@ All password reset requests are recorded in the immutable SHA-256 audit ledger.
     conn.commit()
     conn.close()
 
+    email_html = f"""<!DOCTYPE html>
+<html>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background-color:#f8fafc; color:#0f172a; margin:0; padding:24px;">
+  <div style="max-width:560px; margin:0 auto; background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden;">
+    <div style="background:#1e40af; color:#ffffff; padding:24px; text-align:center;">
+      <h1 style="margin:0; font-size:20px; font-weight:700;">TRUSTVAULT ZERO-TRUST SECURITY</h1>
+      <p style="margin:6px 0 0; font-size:13px; color:#93c5fd;">Cryptographic Access & Identity Management</p>
+    </div>
+    <div style="padding:32px 28px;">
+      <h2 style="font-size:17px; margin-top:0; color:#1e293b;">Password Reset Verification Code</h2>
+      <p style="font-size:14px; line-height:1.6; color:#334155;">
+        Hello <strong>{user['full_name']}</strong>,<br><br>
+        A password reset request was initiated for your TrustVault identity:
+      </p>
+      <ul style="font-size:13px; color:#475569; padding-left:20px; line-height:1.8;">
+        <li><strong>Username:</strong> {user['username']}</li>
+        <li><strong>Assigned Role:</strong> {user['role'].upper()}</li>
+        <li><strong>Timestamp:</strong> {now_str}</li>
+      </ul>
+      <div style="background:#eff6ff; border:2px dashed #3b82f6; border-radius:8px; padding:20px; text-align:center; margin:24px 0;">
+        <div style="font-size:11px; text-transform:uppercase; font-weight:700; color:#2563eb; letter-spacing:1px; margin-bottom:6px;">Cryptographic Verification Token</div>
+        <div style="font-family:'Consolas','Courier New',monospace; font-size:26px; font-weight:700; color:#1e40af; letter-spacing:2px;">{reset_token}</div>
+        <div style="font-size:13px; color:#64748b; margin-top:8px;">Expires in 60 minutes. Enter this token on the reset screen.</div>
+      </div>
+      <div style="background:#fef2f2; border-left:4px solid #ef4444; padding:12px 16px; border-radius:4px; font-size:12px; color:#991b1b;">
+        <strong>SECURITY WARNING:</strong> If you did not request this password reset, your credentials may be targeted. All actions are cryptographically sealed in the SHA-256 audit ledger.
+      </div>
+    </div>
+    <div style="background:#f8fafc; border-top:1px solid #e2e8f0; padding:16px; text-align:center; font-size:12px; color:#94a3b8;">
+      TrustVault Security Subsystem &bull; Automated Dispatch &bull; Do Not Reply
+    </div>
+  </div>
+</body>
+</html>"""
+
+    # Dispatch real email via SMTP if configured
+    email_delivered, delivery_msg = send_email_notification(
+        recipient=user["email"],
+        subject=email_subject,
+        text_content=email_body,
+        html_content=email_html
+    )
+
     # Record event in immutable audit ledger
     database.record_audit_event(
         actor_id=user["id"],
@@ -449,13 +587,21 @@ All password reset requests are recorded in the immutable SHA-256 audit ledger.
         status="ALLOWED",
         ip_address=get_client_ip(),
         user_agent=request.user_agent.string,
-        details={"email": user["email"], "token_id": reset_id, "expires_at": expires_str}
+        details={
+            "email": user["email"],
+            "token_id": reset_id,
+            "expires_at": expires_str,
+            "real_email_sent": email_delivered,
+            "delivery_status": delivery_msg
+        }
     )
 
     return jsonify({
         "message": f"Password reset email successfully dispatched to {user['email']}",
         "email": user["email"],
         "token": reset_token,
+        "email_sent": email_delivered,
+        "delivery_info": delivery_msg,
         "preview": {
             "recipient": user["email"],
             "subject": email_subject,
@@ -571,6 +717,68 @@ def auth_logout():
         )
     session.clear()
     return jsonify({"message": "Logged out successfully"})
+
+@app.route("/api/auth/test-email", methods=["POST"])
+def auth_test_email():
+    """
+    Diagnostics endpoint to test real SMTP email connectivity.
+    Sends a test verification email to the provided address or logged-in user.
+    """
+    data = request.get_json() or {}
+    user = get_current_user()
+    recipient = (data.get("email") or (user["email"] if user else "")).strip().lower()
+
+    if not recipient or "@" not in recipient:
+        return jsonify({"error": "Please provide a valid recipient email address"}), 400
+
+    cfg = get_smtp_config()
+    if not cfg["configured"]:
+        return jsonify({
+            "configured": False,
+            "message": "SMTP is not yet configured. Please set SMTP_SERVER, SMTP_PORT, SMTP_USERNAME, and SMTP_PASSWORD in your .env file or environment variables.",
+            "guide": {
+                "smtp_server": "e.g. smtp.gmail.com (for Gmail) or smtp.sendgrid.net",
+                "smtp_port": "587 (STARTTLS) or 465 (SSL)",
+                "smtp_username": "your_email@gmail.com",
+                "smtp_password": "Google 16-character App Password"
+            }
+        }), 400
+
+    test_subject = "TrustVault SMTP Diagnostics: Real Mailbox Connectivity Verified"
+    test_body = f"""TRUSTVAULT SMTP VERIFICATION DISPATCH
+==================================================
+Timestamp: {datetime.now(timezone.utc).isoformat()}
+Recipient: {recipient}
+SMTP Server: {cfg['server']}:{cfg['port']}
+
+SUCCESS: Your TrustVault installation is properly connected to your email service!
+All password reset tokens and security alerts will now be delivered directly to real user inboxes.
+"""
+    test_html = f"""<div style="font-family:sans-serif; max-width:520px; padding:24px; border:1px solid #3b82f6; border-radius:8px; background:#ffffff;">
+<div style="background:#1e40af; color:#ffffff; padding:12px 16px; border-radius:6px; font-weight:700; margin-bottom:16px;">
+  TRUSTVAULT ZERO-TRUST: SMTP CONNECTIVITY VERIFIED
+</div>
+<h3 style="color:#0f172a; margin-top:0;">Real Mailbox Delivery Operational</h3>
+<p style="color:#334155; font-size:14px;">Your mail service connection is active and successfully authenticated.</p>
+<ul style="color:#475569; font-size:13px; line-height:1.8;">
+  <li><strong>SMTP Host:</strong> {cfg['server']}:{cfg['port']}</li>
+  <li><strong>Target Recipient:</strong> {recipient}</li>
+  <li><strong>Sender Identity:</strong> {cfg['sender']}</li>
+</ul>
+<div style="background:#ecfdf5; border:1px solid #10b981; color:#065f46; padding:10px 14px; border-radius:6px; font-size:13px; font-weight:600;">
+  Verification tokens and security dispatches will now be delivered to genuine email inboxes.
+</div>
+</div>"""
+
+    success, msg = send_email_notification(recipient, test_subject, test_body, test_html)
+    return jsonify({
+        "configured": True,
+        "success": success,
+        "message": msg,
+        "smtp_server": cfg["server"],
+        "smtp_port": cfg["port"],
+        "recipient": recipient
+    }), (200 if success else 500)
 
 @app.route("/api/users", methods=["GET"])
 def list_users():
