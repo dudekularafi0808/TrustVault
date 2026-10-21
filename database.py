@@ -6,8 +6,30 @@ import hmac
 import uuid
 from datetime import datetime, timezone
 
-# Support Vercel serverless writable /tmp directory
-if os.environ.get("VERCEL"):
+# Auto-load .env file if present
+def _load_env_file():
+    env_file = os.path.join(os.path.dirname(__file__), ".env")
+    if os.path.exists(env_file):
+        try:
+            with open(env_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        k = k.strip()
+                        v = v.strip().strip("'\"")
+                        if k and k not in os.environ:
+                            os.environ[k] = v
+        except Exception:
+            pass
+
+_load_env_file()
+
+# Support custom DATABASE_PATH or Vercel serverless writable /tmp directory
+if os.environ.get("DATABASE_PATH"):
+    DB_PATH = os.environ.get("DATABASE_PATH")
+    UPLOADS_DIR = os.environ.get("UPLOADS_DIR") or os.path.join(os.path.dirname(DB_PATH), "uploads")
+elif os.environ.get("VERCEL"):
     DB_PATH = "/tmp/trustvault.db"
     UPLOADS_DIR = "/tmp/uploads"
 else:
