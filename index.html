@@ -2700,7 +2700,11 @@
       document.getElementById('forgotStep1').style.display = 'none';
       document.getElementById('forgotStep2').style.display = 'block';
 
-      document.getElementById('emailPreviewTo').textContent = `To: ${data.email}`;
+      const statusBadge = data.email_sent 
+        ? `To: ${data.email} &bull; <span style="color:#059669; font-weight:700;">Delivered via SMTP</span>`
+        : `To: ${data.email} &bull; <span style="color:#2563eb; font-weight:600;">Simulation Preview</span>`;
+
+      document.getElementById('emailPreviewTo').innerHTML = statusBadge;
       document.getElementById('emailPreviewContent').textContent = (data.preview && data.preview.body) ? data.preview.body : `Dispatched verification token: ${data.token}`;
       document.getElementById('resetTokenInput').value = data.token;
       document.getElementById('resetNewPassInput').value = '';
