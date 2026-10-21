@@ -1,4 +1,6 @@
-# TrustVault — Cryptographic Zero-Trust Document Security Platform
+# TrustVault — Keep your File Safe and Secure
+
+> **"Keep your File Safe and Secure. Permit and revoke the Access Whenever, whomever you want."**
 
 TrustVault is a zero-compromise confidential document security platform where unauthorized entities cannot reach a document, and where you can mathematically prove exactly who accessed it, who attempted to access it, and when.
 
@@ -8,12 +10,17 @@ TrustVault is a zero-compromise confidential document security platform where un
 
 ### 1. Title & Branding
 - **Title:** `TrustVault`
+- **Caption:** *"Keep your File Safe and Secure. Permit and revoke the Access Whenever, whomever you want."*
 - **Palette:** Strict High-Contrast White and Blue enterprise styling (`#1e40af`, `#2563eb`, `#eff6ff`, `#ffffff`).
 - **Access Portal:** Prominently and cleanly features **"Login as"** with three role gates:
-  - **Administrator** (`Sarah Chen`, CISO & Head of Compliance)
-  - **Document owner** (`Marcus Vance`, VP Commercial Operations)
-  - **Viewer** (`Elena Rostova`, Senior Regulatory Auditor)
-- **Authentication:** Mandatory username & password login, user registration ("Sign Up" button on top-right), and email-based password reset verification codes.
+  - **Administrator**
+  - **Document owner**
+  - **Viewer**
+- **Authentication & Multi-Tier Role Approvals:**
+  - **Administrator Signup:** Forwarded to the Host (`23jr1a0460@gmail.com`) for approval. Only host authorization activates the account.
+  - **Document owner Signup:** Forwarded to System Administrators for approval. Any administrator approval activates the account.
+  - **Viewer Signup:** Forwarded to Administrators and Document Owners. Any administrator or document owner approval activates the account.
+  - Mandatory username & password login, user registration ("Sign Up" button on top-right), and email-based password reset verification codes.
 
 ---
 
