@@ -231,7 +231,11 @@ def init_db(reset=False):
             password_hash TEXT NOT NULL,
             title TEXT NOT NULL,
             avatar_color TEXT NOT NULL,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            approval_token TEXT,
+            approved_by TEXT,
+            approved_at TEXT
         );
 
         CREATE TABLE IF NOT EXISTS documents (
@@ -307,6 +311,28 @@ def init_db(reset=False):
             signature TEXT NOT NULL
         );
     """)
+    # Dynamic migration for existing users table
+    cursor.execute("PRAGMA table_info(users)")
+    existing_cols = [c["name"] for c in cursor.fetchall()]
+    if "status" not in existing_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'active'")
+    if "approval_token" not in existing_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN approval_token TEXT")
+    if "approved_by" not in existing_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN approved_by TEXT")
+    if "approved_at" not in existing_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN approved_at TEXT")
+
+    # Ensure Host user exists with active admin role
+    host_email = os.environ.get("HOST_EMAIL", "23jr1a0460@gmail.com").strip().lower()
+    cursor.execute("SELECT id FROM users WHERE LOWER(email) = ?", (host_email,))
+    if not cursor.fetchone():
+        now_str = datetime.now(timezone.utc).isoformat()
+        cursor.execute("""
+            INSERT INTO users (id, username, email, full_name, role, password_hash, title, avatar_color, created_at, status, approved_by, approved_at)
+            VALUES (?, ?, ?, ?, 'admin', ?, 'Platform Host & Root Administrator', '#1e40af', ?, 'active', 'system', ?)
+        """, ("usr_host_root", "host.admin", host_email, "Platform Host", hash_password("admin123"), now_str, now_str))
+
     conn.commit()
     conn.close()
 
