@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
   <meta name="theme-color" content="#ffffff">
   <meta name="color-scheme" content="light">
-  <meta name="description" content="TrustVault - Cryptographically verifiable zero-trust document security platform.">
+  <meta name="description" content="TrustVault - Keep your File Safe and Secure. Permit and revoke the Access Whenever, whomever you want.">
   <title>TrustVault</title>
   
   <!-- Modern & Windows Native Font Fallbacks -->
@@ -1628,7 +1628,7 @@
           <span>Zero-Trust Database Connected</span>
         </div>
         <button class="btn-top-signup" onclick="openSignUpModal()" title="Create a new TrustVault identity">
-          <span>👤+</span> Sign Up
+          Sign Up
         </button>
       </div>
 
@@ -1657,7 +1657,7 @@
           <polygon points="58,52 62,52 64,63 56,63" fill="#1d4ed8"/>
         </svg>
         <h1 class="login-title">TrustVault</h1>
-        <p class="login-tagline">Cryptographically verifiable zero-trust document vault. Where unauthorized access is impossible, and every reach is forensically provable.</p>
+        <p class="login-tagline">Keep your File Safe and Secure. Permit and revoke the Access Whenever, whomever you want.</p>
       </div>
 
       <div class="login-card">
@@ -1670,33 +1670,24 @@
         <div class="login-options-grid">
           <!-- Option 1: Administrator -->
           <div class="role-option-card admin" onclick="openRoleLoginModal('admin')">
-            <div class="role-icon-box">🛡️</div>
             <h3 class="role-title">Administrator</h3>
-            <p class="role-desc">System governance, tamper-evident hash-chain verification, compliance oversight, and refused-access monitoring.</p>
-            <div class="role-persona-hint">Sarah Chen (CISO)</div>
           </div>
 
           <!-- Option 2: Document owner -->
           <div class="role-option-card owner" onclick="openRoleLoginModal('owner')">
-            <div class="role-icon-box">🔐</div>
             <h3 class="role-title">Document owner</h3>
-            <p class="role-desc">Upload, categorize, validate files, grant granular permissions, and revoke access with instant zero-latency effect.</p>
-            <div class="role-persona-hint">Marcus Vance (VP)</div>
           </div>
 
           <!-- Option 3: Viewer -->
           <div class="role-option-card viewer" onclick="openRoleLoginModal('viewer')">
-            <div class="role-icon-box">👁️</div>
             <h3 class="role-title">Viewer</h3>
-            <p class="role-desc">Access strictly granted confidential files. Zero visibility into ungranted documents with server-enforced access.</p>
-            <div class="role-persona-hint">Elena Rostova (Auditor)</div>
           </div>
         </div>
 
         <div class="login-security-guarantee">
-          <span>🔒 Server-enforced on every byte</span>
-          <span class="verified">⛓️ SHA-256 Tamper-evident ledger</span>
-          <span>⚡ Immediate revocation</span>
+          <span>Server-enforced on every byte</span>
+          <span class="verified">SHA-256 Tamper-evident ledger</span>
+          <span>Immediate revocation</span>
         </div>
       </div>
     </div>
@@ -1717,19 +1708,19 @@
 
         <div class="nav-tabs">
           <button class="nav-tab-btn active" id="tabDocsBtn" onclick="switchTab('documents')">
-            <span>📁</span> Documents
+            Documents
           </button>
           <button class="nav-tab-btn" id="tabAuditBtn" onclick="switchTab('audit')">
-            <span>⛓️</span> Tamper-Evident Audit Trail
+            Tamper-Evident Audit Trail
           </button>
           <button class="nav-tab-btn" id="tabTestsBtn" onclick="openTestModal()">
-            <span>🧪</span> Security Test Suite <span id="testCountBadge" class="badge" style="font-size:0.65rem; background:#eff6ff; color:#1d4ed8; padding:2px 6px; border-radius:10px; border:1px solid #bfdbfe;">10/10 PASS</span>
+            Security Test Suite <span id="testCountBadge" class="badge" style="font-size:0.65rem; background:#eff6ff; color:#1d4ed8; padding:2px 6px; border-radius:10px; border:1px solid #bfdbfe;">10/10 PASS</span>
           </button>
         </div>
 
         <div class="nav-actions">
           <button class="btn-secondary nav-desktop-only" onclick="openSpecModal()" title="View Security Architecture">
-            <span>📄</span> Security Spec
+            Security Spec
           </button>
 
           <div class="user-badge" id="currentUserBadge" onclick="openPersonaSwitchModal()" title="Click to switch persona">
@@ -1741,10 +1732,10 @@
           </div>
 
           <button class="btn-secondary nav-desktop-only" onclick="openPersonaSwitchModal()" title="Switch User or Role">
-            <span>🔄</span> Switch
+            Switch
           </button>
           <button class="btn-danger nav-desktop-only" onclick="logout()" title="Logout and return to Login as page">
-            <span>🚪</span> Logout
+            Logout
           </button>
 
           <button class="mobile-menu-btn" id="mobileMenuBtn" onclick="toggleMobileMenu()" aria-label="Toggle navigation menu">
@@ -1763,22 +1754,22 @@
         </div>
         <div class="mobile-drawer-links">
           <button class="mobile-drawer-btn" onclick="switchTab('documents'); toggleMobileMenu();">
-            <span>📁</span> Documents Vault
+            Documents Vault
           </button>
           <button class="mobile-drawer-btn" onclick="switchTab('audit'); toggleMobileMenu();">
-            <span>⛓️</span> Tamper-Evident Audit Trail
+            Tamper-Evident Audit Trail
           </button>
           <button class="mobile-drawer-btn" onclick="openTestModal(); toggleMobileMenu();">
-            <span>🧪</span> Security Test Suite
+            Security Test Suite
           </button>
           <button class="mobile-drawer-btn" onclick="openSpecModal(); toggleMobileMenu();">
-            <span>📄</span> Security Architecture Spec
+            Security Architecture Spec
           </button>
           <button class="mobile-drawer-btn" onclick="openPersonaSwitchModal(); toggleMobileMenu();">
-            <span>🔄</span> Switch Active Persona
+            Switch Active Persona
           </button>
           <button class="mobile-drawer-btn logout" onclick="logout(); toggleMobileMenu();">
-            <span>🚪</span> Sign Out
+            Sign Out
           </button>
         </div>
       </div>
@@ -1786,16 +1777,16 @@
       <main class="main-content">
         <div class="security-banner">
           <div class="security-banner-info">
-            <div class="security-banner-icon">🛡️</div>
+            
             <div>
               <div class="security-banner-title">Server-Enforced Zero-Trust Security Active</div>
               <div class="security-banner-text">All document requests, downloads, and permission evaluations are strictly validated server-side.</div>
             </div>
           </div>
           <div class="standards-badges">
-            <span class="std-badge std1">✓ Standard 1: Server Decides</span>
-            <span class="std-badge std2">✓ Standard 2: Tamper-Evident Chain</span>
-            <span class="std-badge std3">✓ Standard 3: Instant Revocation</span>
+            <span class="std-badge std1">Standard 1: Server Decides</span>
+            <span class="std-badge std2">Standard 2: Tamper-Evident Chain</span>
+            <span class="std-badge std3">Standard 3: Instant Revocation</span>
           </div>
         </div>
 
@@ -1804,7 +1795,7 @@
           <div class="action-bar">
             <div class="search-group">
               <div class="search-input-wrapper">
-                <span class="search-icon">🔍</span>
+                
                 <input type="text" id="docSearchInput" class="search-input" placeholder="Search by document title, description, or owner..." oninput="handleDocSearch()">
               </div>
               <select id="docCategorySelect" class="category-select" onchange="handleDocSearch()">
@@ -1819,7 +1810,7 @@
 
             <div class="action-buttons-right">
               <button class="btn-primary" id="uploadBtn" onclick="openUploadModal()">
-                <span>⬆️</span> Upload Document
+                Upload Document
               </button>
             </div>
           </div>
@@ -1832,7 +1823,7 @@
           <div class="audit-header-panel">
             <div class="audit-status-strip">
               <div class="audit-integrity-card">
-                <div class="audit-integrity-icon" id="chainStatusIcon">⛓️</div>
+                
                 <div>
                   <div class="audit-integrity-title" id="chainStatusTitle">Tamper-Evident Hash Chain: Verified</div>
                   <div class="audit-integrity-subtitle" id="chainStatusSubtitle">Every block links SHA-256 hashes to Genesis Block #1. Offline tampering is mathematically flagged.</div>
@@ -1841,10 +1832,10 @@
 
               <div class="audit-tool-buttons">
                 <button class="btn-emerald" onclick="verifyLedgerIntegrity()">
-                  <span>🔍</span> Verify Chain Integrity
+                  Verify Chain Integrity
                 </button>
                 <button class="btn-secondary" onclick="simulateCovertTampering()">
-                  <span>⚡</span> Simulate Tamper Detection
+                  Simulate Tamper Detection
                 </button>
               </div>
             </div>
@@ -1852,7 +1843,7 @@
             <div class="action-bar" style="margin-bottom:0;">
               <div class="search-group">
                 <div class="search-input-wrapper">
-                  <span class="search-icon">🔍</span>
+                  
                   <input type="text" id="auditSearchInput" class="search-input" placeholder="Filter audit ledger by action, document, or detail..." oninput="loadAuditTrail()">
                 </div>
                 <select id="auditStatusSelect" class="category-select" onchange="loadAuditTrail()">
@@ -1875,7 +1866,7 @@
 
           <div class="audit-table-wrapper">
             <div class="mobile-scroll-hint">
-              <span>⇄ Swipe horizontally to inspect full cryptographic block hashes & telemetry</span>
+              <span>Swipe horizontally to inspect full cryptographic block hashes & telemetry</span>
             </div>
             <table class="audit-table">
               <thead>
@@ -1898,23 +1889,23 @@
 
       <nav class="mobile-bottom-bar" id="mobileBottomBar">
         <button class="mobile-bar-btn active" id="mobTabDocs" onclick="switchTab('documents')">
-          <span class="mob-icon">📁</span>
+          
           <span class="mob-label">Vault</span>
         </button>
         <button class="mobile-bar-btn" id="mobTabAudit" onclick="switchTab('audit')">
-          <span class="mob-icon">⛓️</span>
+          
           <span class="mob-label">Audit</span>
         </button>
         <button class="mobile-bar-btn" onclick="openTestModal()">
-          <span class="mob-icon">🧪</span>
+          
           <span class="mob-label">Tests</span>
         </button>
         <button class="mobile-bar-btn" onclick="openSpecModal()">
-          <span class="mob-icon">📄</span>
+          
           <span class="mob-label">Spec</span>
         </button>
         <button class="mobile-bar-btn" onclick="openPersonaSwitchModal()">
-          <span class="mob-icon">🔄</span>
+          
           <span class="mob-label">Role</span>
         </button>
       </nav>
@@ -1936,10 +1927,7 @@
           <div class="modal-body">
             <div id="roleLoginError" class="auth-error-banner" style="display:none;"></div>
             
-            <div class="demo-credentials-card" id="roleLoginDemoHint">
-              <div><strong>Default Demo Credentials:</strong> <span id="roleDemoUser">sarah.admin</span> / <span id="roleDemoPass">admin123</span></div>
-              <div style="font-size:0.72rem; color:var(--text-dim);">(Or enter the username and password you put when you signed up)</div>
-            </div>
+
 
             <input type="hidden" id="loginTargetRole" value="admin">
 
@@ -1955,13 +1943,13 @@
               </div>
               <div class="auth-input-wrapper">
                 <input type="password" id="loginPasswordInput" placeholder="Enter password" required autocomplete="current-password">
-                <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('loginPasswordInput', this)" title="Show/Hide password">👁️</button>
+                <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('loginPasswordInput', this)" title="Show/Hide password"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
               </div>
             </div>
           </div>
           <div class="modal-footer" style="flex-direction:column; align-items:stretch; gap:12px;">
             <button type="submit" class="btn-primary" id="roleLoginSubmitBtn" style="width:100%; justify-content:center; padding:11px;">
-              <span>🔒</span> <span id="roleLoginBtnText">Sign In as Administrator</span>
+              <span id="roleLoginBtnText">Sign In as Administrator</span>
             </button>
             <div style="text-align:center; font-size:0.82rem; color:var(--text-muted);">
               Don't have an account yet? <a href="javascript:void(0)" onclick="closeModal('roleLoginModal'); openSignUpModal();" style="color:#2563eb; font-weight:700; text-decoration:none;">Sign Up</a>
@@ -2020,21 +2008,21 @@
                 <label class="form-label">Password (Min 6 chars)</label>
                 <div class="auth-input-wrapper">
                   <input type="password" id="signupPassword" placeholder="Create password" required autocomplete="new-password">
-                  <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('signupPassword', this)">👁️</button>
+                  <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('signupPassword', this)" title="Show/Hide password"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
                 </div>
               </div>
               <div class="form-group">
                 <label class="form-label">Confirm Password</label>
                 <div class="auth-input-wrapper">
                   <input type="password" id="signupConfirmPassword" placeholder="Confirm password" required autocomplete="new-password">
-                  <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('signupConfirmPassword', this)">👁️</button>
+                  <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('signupConfirmPassword', this)" title="Show/Hide password"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
                 </div>
               </div>
             </div>
           </div>
           <div class="modal-footer" style="flex-direction:column; align-items:stretch; gap:12px;">
             <button type="submit" class="btn-primary" id="signupSubmitBtn" style="width:100%; justify-content:center; padding:11px;">
-              <span>🔒</span> Create Account & Enter Vault
+              Create Account & Enter Vault
             </button>
             <div style="text-align:center; font-size:0.82rem; color:var(--text-muted);">
               Already have an account? <a href="javascript:void(0)" onclick="closeModal('signUpModal'); openRoleLoginModal('viewer');" style="color:#2563eb; font-weight:700; text-decoration:none;">Log In</a>
@@ -2073,7 +2061,7 @@
             <div class="modal-footer">
               <button type="button" class="btn-secondary" onclick="closeModal('forgotPasswordModal')">Cancel</button>
               <button type="submit" class="btn-primary" id="forgotReqSubmitBtn">
-                <span>✉️</span> Dispatch Password Reset Email
+                Dispatch Password Reset Email
               </button>
             </div>
           </form>
@@ -2088,7 +2076,7 @@
 
               <div class="email-dispatch-preview-card">
                 <div class="email-preview-header">
-                  <span>✉️ Outbound Email Dispatched by Server</span>
+                  <span>Outbound Email Dispatched by Server</span>
                   <span id="emailPreviewTo">to user</span>
                 </div>
                 <div class="email-preview-body" id="emailPreviewContent">
@@ -2106,14 +2094,14 @@
                   <label class="form-label">New Password (Min 6 chars)</label>
                   <div class="auth-input-wrapper">
                     <input type="password" id="resetNewPassInput" placeholder="New password" required autocomplete="new-password">
-                    <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('resetNewPassInput', this)">👁️</button>
+                    <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('resetNewPassInput', this)" title="Show/Hide password"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
                   </div>
                 </div>
                 <div class="form-group">
                   <label class="form-label">Confirm New Password</label>
                   <div class="auth-input-wrapper">
                     <input type="password" id="resetConfirmPassInput" placeholder="Confirm password" required autocomplete="new-password">
-                    <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('resetConfirmPassInput', this)">👁️</button>
+                    <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('resetConfirmPassInput', this)" title="Show/Hide password"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
                   </div>
                 </div>
               </div>
@@ -2121,7 +2109,7 @@
             <div class="modal-footer" style="justify-content:space-between; align-items:center;">
               <button type="button" class="btn-secondary" onclick="backToForgotStep1()">← Re-enter Email</button>
               <button type="submit" class="btn-primary" id="resetPassSubmitBtn">
-                <span>🔒</span> Update Password & Secure Account
+                Update Password & Secure Account
               </button>
             </div>
           </form>
@@ -2159,7 +2147,7 @@
             <div class="form-group">
               <label class="form-label">Select File (Strict Magic Byte & MIME Validation)</label>
               <div class="file-dropzone" onclick="document.getElementById('fileInput').click()">
-                <div class="dropzone-icon">📄</div>
+                
                 <div class="dropzone-text" id="selectedFileName">Click to browse or drop file here</div>
                 <div class="dropzone-subtext">Allowed: PDF, DOCX, XLSX, CSV, TXT, PNG, JPG (Max 25MB). Executables & scripts blocked.</div>
               </div>
@@ -2170,7 +2158,7 @@
           <div class="modal-footer">
             <button type="button" class="btn-secondary" onclick="closeModal('uploadModal')">Cancel</button>
             <button type="submit" class="btn-primary" id="uploadSubmitBtn">
-              <span>🔒</span> Validate & Secure Upload
+              Validate & Secure Upload
             </button>
           </div>
         </form>
@@ -2222,7 +2210,7 @@
                 <p style="font-size:0.78rem; color:var(--text-dim);">Grant or instantly revoke access. Revocation terminates access with zero latency.</p>
               </div>
               <button class="btn-emerald" onclick="openShareLinkGen()" style="font-size:0.78rem; padding:5px 10px;">
-                <span>🔗</span> Generate Revocable Link
+                Generate Revocable Link
               </button>
             </div>
 
@@ -2397,16 +2385,19 @@
       loadUsers();
     }
 
+    const EYE_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+    const EYE_OFF_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
     function togglePasswordVisibility(inputId, btn) {
       const input = document.getElementById(inputId);
       if (!input) return;
       if (input.type === 'password') {
         input.type = 'text';
-        btn.textContent = '🙈';
+        btn.innerHTML = EYE_OFF_SVG;
         btn.title = 'Hide password';
       } else {
         input.type = 'password';
-        btn.textContent = '👁️';
+        btn.innerHTML = EYE_SVG;
         btn.title = 'Show password';
       }
     }
@@ -2425,21 +2416,21 @@
 
       const roleConfigs = {
         admin: {
-          title: '🛡️ Administrator Sign In',
+          title: 'Administrator Sign In',
           subtitle: 'Verify governance & audit compliance credentials to access the vault.',
           btn: 'Sign In as Administrator',
           user: 'sarah.admin',
           pass: 'admin123'
         },
         owner: {
-          title: '🔐 Document Owner Sign In',
+          title: 'Document Owner Sign In',
           subtitle: 'Verify discretionary access & management credentials to access the vault.',
           btn: 'Sign In as Document Owner',
           user: 'marcus.vance',
           pass: 'owner123'
         },
         viewer: {
-          title: '👁️ Viewer Sign In',
+          title: 'Viewer Sign In',
           subtitle: 'Enter your credentials to inspect granted confidential documents.',
           btn: 'Sign In as Viewer',
           user: 'elena.rostova',
@@ -2575,12 +2566,19 @@
         const data = await res.json();
         if (submitBtn) submitBtn.disabled = false;
 
-        if (res.ok && data.user) {
-          currentUser = data.user;
-          closeModal('signUpModal');
-          showDashboard();
-          alert(`Welcome to TrustVault, ${data.user.full_name}!\nYour account was created in the database with role: ${data.user.role.toUpperCase()}`);
-          return;
+        if (res.ok) {
+          if (data.status === 'pending_approval') {
+            closeModal('signUpModal');
+            alert(data.message || 'Registration submitted! Your details have been forwarded for authorization. Once permission is granted, your account will be activated.');
+            return;
+          }
+          if (data.user) {
+            currentUser = data.user;
+            closeModal('signUpModal');
+            showDashboard();
+            alert(`Welcome to TrustVault, ${data.user.full_name}!\nYour account was created in the database with role: ${data.user.role.toUpperCase()}`);
+            return;
+          }
         } else {
           if (errBox) {
             errBox.textContent = data.error || 'Error creating account';
@@ -2700,7 +2698,11 @@
       document.getElementById('forgotStep1').style.display = 'none';
       document.getElementById('forgotStep2').style.display = 'block';
 
-      document.getElementById('emailPreviewTo').textContent = `To: ${data.email}`;
+      const statusBadge = data.email_sent 
+        ? `To: ${data.email} &bull; <span style="color:#059669; font-weight:700;">Delivered via SMTP</span>`
+        : `To: ${data.email} &bull; <span style="color:#2563eb; font-weight:600;">Simulation Preview</span>`;
+
+      document.getElementById('emailPreviewTo').innerHTML = statusBadge;
       document.getElementById('emailPreviewContent').textContent = (data.preview && data.preview.body) ? data.preview.body : `Dispatched verification token: ${data.token}`;
       document.getElementById('resetTokenInput').value = data.token;
       document.getElementById('resetNewPassInput').value = '';
@@ -2748,7 +2750,7 @@
         if (submitBtn) submitBtn.disabled = false;
 
         if (res.ok) {
-          succBox.textContent = '✓ ' + (data.message || 'Password successfully updated!');
+          succBox.textContent =  (data.message || 'Password successfully updated!');
           succBox.style.display = 'flex';
           setTimeout(() => {
             closeModal('forgotPasswordModal');
@@ -2783,7 +2785,7 @@
         user.password = newPass;
       }
 
-      succBox.textContent = '✓ Password successfully updated in database! Please sign in with your new credentials.';
+      succBox.textContent = 'Password successfully updated in database! Please sign in with your new credentials.';
       succBox.style.display = 'flex';
       setTimeout(() => {
         closeModal('forgotPasswordModal');
@@ -2995,7 +2997,7 @@
       if (docs.length === 0) {
         grid.innerHTML = `
           <div class="empty-state">
-            <div class="empty-state-icon">🔒</div>
+            
             <h3>No Documents Found</h3>
             <p style="max-width:400px; margin:8px auto 0;">
               ${currentUser && currentUser.role === 'viewer' 
@@ -3015,7 +3017,7 @@
 
         card.innerHTML = `
           <div class="doc-card-header">
-            <div class="doc-type-icon">📕</div>
+            
             <div class="doc-card-titles">
               <h4 class="doc-title">${escapeHtml(doc.title)}</h4>
               <span class="doc-category-badge">${escapeHtml(doc.category)}</span>
@@ -3024,8 +3026,8 @@
           </div>
           <p class="doc-description">${escapeHtml(doc.description || 'Confidential document safely vaulted under zero-trust governance.')}</p>
           <div class="doc-meta-row">
-            <div class="doc-owner-info"><span>👤 ${escapeHtml(doc.owner_name)}</span></div>
-            <div>📅 Oct 19, 2026 &bull; ${(doc.file_size / 1024).toFixed(1)} KB</div>
+            <div class="doc-owner-info"><span>Owner: ${escapeHtml(doc.owner_name)}</span></div>
+            <div>Oct 19, 2026 &bull; ${(doc.file_size / 1024).toFixed(1)} KB</div>
           </div>
           <div style="margin-bottom:14px;">
             <div class="doc-hash-preview" title="SHA-256 Checksum: ${doc.sha256_hash}">
@@ -3034,9 +3036,9 @@
             </div>
           </div>
           <div class="doc-card-actions">
-            <button class="btn-secondary" onclick="openDocDetail('${doc.id}')"><span>🔍</span> Inspect</button>
+            <button class="btn-secondary" onclick="openDocDetail('${doc.id}')">Inspect</button>
             <button class="btn-primary" onclick="downloadDoc('${doc.id}')"><span>⬇️</span> Download</button>
-            ${isOwner ? `<button class="btn-danger" style="flex:0 0 36px; padding:8px;" onclick="deleteDoc('${doc.id}')" title="Delete">🗑️</button>` : ''}
+            ${isOwner ? `<button class="btn-danger" style="flex:0 0 36px; padding:8px;" onclick="deleteDoc('${doc.id}')" title="Delete">Delete</button>` : ''}
           </div>
         `;
         grid.appendChild(card);
@@ -3114,7 +3116,7 @@
           <td><span class="doc-access-chip ${p.access_level}">${p.access_level.toUpperCase()}</span></td>
           <td style="font-size:0.78rem; color:var(--text-dim);">Oct 19, 2026</td>
           <td style="text-align:right;">
-            ${isOwner ? `<button class="btn-danger" style="font-size:0.72rem; padding:4px 8px;" onclick="revokePermission('${p.user_id}', '${escapeHtml(p.full_name)}')">⚡ Revoke Access</button>` : '<span style="color:var(--text-dim); font-size:0.75rem;">Locked</span>'}
+            ${isOwner ? `<button class="btn-danger" style="font-size:0.72rem; padding:4px 8px;" onclick="revokePermission('${p.user_id}', '${escapeHtml(p.full_name)}')">Revoke Access</button>` : '<span style="color:var(--text-dim); font-size:0.75rem;">Locked</span>'}
           </td>
         `;
         tbody.appendChild(tr);
@@ -3158,7 +3160,7 @@
       try {
         const res = await fetch(`/api/documents/${currentActiveDoc.id}/permissions/${targetUserId}`, { method: 'DELETE' });
         if (res.ok) {
-          alert(`⚡ ACCESS IMMEDIATELY REVOKED!\nAccess terminated on the spot.`);
+          alert(`ACCESS REVOKED: Access terminated immediately.`);
           openDocDetail(currentActiveDoc.id);
           loadDocuments();
           return;
@@ -3167,7 +3169,7 @@
 
       // Client fallback
       currentActiveDoc.permissions = currentActiveDoc.permissions.filter(p => p.user_id !== targetUserId);
-      alert(`⚡ ACCESS IMMEDIATELY REVOKED!\nAll tokens and sessions for ${targetUserName} have been purged.`);
+      alert(`ACCESS REVOKED: All tokens and sessions for ${targetUserName} have been purged.`);
       renderDetailModal(currentActiveDoc);
       loadDocuments();
     }
@@ -3178,7 +3180,7 @@
 
     function downloadDoc(docId) {
       if (currentUser && currentUser.role === 'admin' && docId === 'doc_hr_salary') {
-        alert("🔒 Access Refused: Zero-Trust Separation of Duties enforces that Administrators cannot view ungranted confidential file payloads.");
+        alert("Access Refused: Zero-Trust Separation of Duties enforces that Administrators cannot view ungranted confidential file payloads.");
         return;
       }
       window.open(`/api/documents/${docId}/download`, '_blank');
@@ -3273,7 +3275,7 @@
             <div style="font-weight:600; font-size:0.82rem; color:var(--text-main);">${escapeHtml(e.target_name)}</div>
             <div style="font-size:0.7rem; color:var(--text-dim);">${e.target_type}</div>
           </td>
-          <td><span class="audit-status-badge ${e.status}">${isRefused ? '🛡️ REFUSED' : '✓ ALLOWED'}</span></td>
+          <td><span class="audit-status-badge ${e.status}">${isRefused ? 'REFUSED' : 'ALLOWED'}</span></td>
           <td style="font-family:var(--font-mono); font-size:0.75rem; color:var(--text-dim);">${e.ip_address}</td>
           <td><span class="audit-hash-chip">${e.current_hash.substring(0, 16)}...</span></td>
         `;
@@ -3318,7 +3320,7 @@
           item.className = 'test-item passed';
           item.innerHTML = `
             <div class="test-title-desc">
-              <div class="test-name"><span>✓</span><span>${t.name}</span><span class="test-badge-standard">${t.standard}</span></div>
+              <div class="test-name"><span>${t.name}</span><span class="test-badge-standard">${t.standard}</span></div>
               <div class="test-desc">${t.description}</div>
             </div>
             <div style="text-align:right;">

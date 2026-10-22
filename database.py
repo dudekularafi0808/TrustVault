@@ -6,8 +6,149 @@ import hmac
 import uuid
 from datetime import datetime, timezone
 
-# Support Vercel serverless writable /tmp directory
-if os.environ.get("VERCEL"):
+# Auto-load .env file if present
+def _load_env_file():
+    env_file = os.path.join(os.path.dirname(__file__), ".env")
+    if os.path.exists(env_file):
+        try:
+            with open(env_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        k = k.strip()
+                        v = v.strip().strip("'\"")
+                        if k and k not in os.environ:
+                            os.environ[k] = v
+        except Exception:
+            pass
+
+_load_env_file()
+
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+IS_POSTGRES = DATABASE_URL.startswith("postgresql://") or DATABASE_URL.startswith("postgres://")
+
+def _normalize_pg_url(url: str) -> str:
+    if url.count("@") > 1 and "://" in url:
+        prefix, rest = url.split("://", 1)
+        user_info, host_info = rest.rsplit("@", 1)
+        if ":" in user_info:
+            user, pwd = user_info.split(":", 1)
+            import urllib.parse
+            url = f"{prefix}://{user}:{urllib.parse.quote(pwd, safe='')}@{host_info}"
+    if "sslmode=" not in url:
+        sep = "&" if "?" in url else "?"
+        url = f"{url}{sep}sslmode=require"
+    return url
+
+if IS_POSTGRES:
+    import psycopg2
+    import psycopg2.extras
+
+    class PostgresCursorWrapper:
+        def __init__(self, raw_cursor):
+            self._cur = raw_cursor
+
+        def _convert_query(self, query):
+            if "?" in query:
+                return query.replace("?", "%s")
+            return query
+
+        def execute(self, query, params=None):
+            converted = self._convert_query(query)
+            if params is not None:
+                return self._cur.execute(converted, params)
+            return self._cur.execute(converted)
+
+        def executemany(self, query, param_seq):
+            converted = self._convert_query(query)
+            return self._cur.executemany(converted, param_seq)
+
+        def executescript(self, script):
+            return self._cur.execute(script)
+
+        def fetchone(self):
+            return self._cur.fetchone()
+
+        def fetchall(self):
+            return self._cur.fetchall()
+
+        def fetchmany(self, size=None):
+            return self._cur.fetchmany(size) if size else self._cur.fetchmany()
+
+        @property
+        def rowcount(self):
+            return self._cur.rowcount
+
+        @property
+        def description(self):
+            return self._cur.description
+
+        def close(self):
+            try:
+                self._cur.close()
+            except Exception:
+                pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            self.close()
+
+    class PostgresConnWrapper:
+        def __init__(self, raw_conn):
+            self._conn = raw_conn
+
+        def cursor(self):
+            raw_cur = self._conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            return PostgresCursorWrapper(raw_cur)
+
+        def execute(self, query, params=None):
+            cur = self.cursor()
+            cur.execute(query, params)
+            return cur
+
+        def executescript(self, script):
+            cur = self.cursor()
+            cur.executescript(script)
+            return cur
+
+        def commit(self):
+            self._conn.commit()
+
+        def rollback(self):
+            self._conn.rollback()
+
+        def close(self):
+            try:
+                self._conn.close()
+            except Exception:
+                pass
+
+        @property
+        def row_factory(self):
+            return None
+
+        @row_factory.setter
+        def row_factory(self, val):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            if exc_type:
+                self.rollback()
+            else:
+                self.commit()
+            self.close()
+
+# Support custom DATABASE_PATH or Vercel serverless writable /tmp directory
+if os.environ.get("DATABASE_PATH"):
+    DB_PATH = os.environ.get("DATABASE_PATH")
+    UPLOADS_DIR = os.environ.get("UPLOADS_DIR") or os.path.join(os.path.dirname(DB_PATH), "uploads")
+elif os.environ.get("VERCEL"):
     DB_PATH = "/tmp/trustvault.db"
     UPLOADS_DIR = "/tmp/uploads"
 else:
@@ -17,16 +158,22 @@ else:
 VAULT_HMAC_KEY = b"TRUSTVAULT_IMMUTABLE_AUDIT_SECRET_KEY_v2026_DEEPMIND"
 
 def _get_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON;")
-    conn.execute("PRAGMA journal_mode = WAL;")
-    return conn
+    if IS_POSTGRES:
+        normalized_url = _normalize_pg_url(DATABASE_URL)
+        raw_conn = psycopg2.connect(normalized_url)
+        return PostgresConnWrapper(raw_conn)
+    else:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON;")
+        conn.execute("PRAGMA journal_mode = WAL;")
+        return conn
 
 def get_db():
-    if not os.path.exists(DB_PATH):
+    if not IS_POSTGRES and not os.path.exists(DB_PATH):
         init_db(reset=False)
     return _get_connection()
+
 
 def compute_record_hash(sequence_id, prev_hash, timestamp, actor_id, action, target_id, status, details):
     content = f"{sequence_id}|{prev_hash}|{timestamp}|{actor_id}|{action}|{target_id}|{status}|{details}"
@@ -193,8 +340,132 @@ def verify_password(password: str, stored_hash: str) -> bool:
     return hmac.compare_digest(stored_hash, legacy_hash)
 
 def init_db(reset=False):
+    if IS_POSTGRES:
+        conn = _get_connection()
+        cursor = conn.cursor()
+        if reset:
+            cursor.executescript("""
+                DROP TABLE IF EXISTS audit_ledger CASCADE;
+                DROP TABLE IF EXISTS outbound_emails CASCADE;
+                DROP TABLE IF EXISTS password_resets CASCADE;
+                DROP TABLE IF EXISTS active_download_tokens CASCADE;
+                DROP TABLE IF EXISTS permissions CASCADE;
+                DROP TABLE IF EXISTS documents CASCADE;
+                DROP TABLE IF EXISTS users CASCADE;
+            """)
+            conn.commit()
+
+        cursor.executescript("""
+            CREATE TABLE IF NOT EXISTS users (
+                id VARCHAR(255) PRIMARY KEY,
+                username VARCHAR(255) UNIQUE NOT NULL,
+                email VARCHAR(255) UNIQUE NOT NULL,
+                full_name VARCHAR(255) NOT NULL,
+                role VARCHAR(50) NOT NULL CHECK(role IN ('admin', 'owner', 'viewer')),
+                password_hash VARCHAR(255) NOT NULL,
+                title VARCHAR(255) NOT NULL,
+                avatar_color VARCHAR(50) NOT NULL,
+                created_at VARCHAR(100) NOT NULL,
+                status VARCHAR(50) NOT NULL DEFAULT 'active',
+                approval_token VARCHAR(255),
+                approved_by VARCHAR(255),
+                approved_at VARCHAR(100)
+            );
+
+            CREATE TABLE IF NOT EXISTS documents (
+                id VARCHAR(255) PRIMARY KEY,
+                title VARCHAR(255) NOT NULL,
+                description TEXT,
+                category VARCHAR(100) NOT NULL,
+                filename VARCHAR(255) NOT NULL,
+                stored_path VARCHAR(255) NOT NULL,
+                file_size BIGINT NOT NULL,
+                mime_type VARCHAR(100) NOT NULL,
+                sha256_hash VARCHAR(255) NOT NULL,
+                owner_id VARCHAR(255) NOT NULL REFERENCES users(id),
+                owner_name VARCHAR(255) NOT NULL,
+                created_at VARCHAR(100) NOT NULL,
+                updated_at VARCHAR(100) NOT NULL,
+                is_deleted INTEGER DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS permissions (
+                id VARCHAR(255) PRIMARY KEY,
+                document_id VARCHAR(255) NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+                user_id VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                access_level VARCHAR(50) NOT NULL CHECK(access_level IN ('read', 'edit')),
+                granted_by VARCHAR(255) NOT NULL REFERENCES users(id),
+                granted_at VARCHAR(100) NOT NULL,
+                UNIQUE(document_id, user_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS active_download_tokens (
+                token VARCHAR(255) PRIMARY KEY,
+                document_id VARCHAR(255) NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+                user_id VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                created_at VARCHAR(100) NOT NULL,
+                expires_at VARCHAR(100) NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS password_resets (
+                id VARCHAR(255) PRIMARY KEY,
+                user_id VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                email VARCHAR(255) NOT NULL,
+                token VARCHAR(255) NOT NULL,
+                expires_at VARCHAR(100) NOT NULL,
+                used INTEGER DEFAULT 0,
+                created_at VARCHAR(100) NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS outbound_emails (
+                id VARCHAR(255) PRIMARY KEY,
+                recipient VARCHAR(255) NOT NULL,
+                subject VARCHAR(255) NOT NULL,
+                body TEXT NOT NULL,
+                token VARCHAR(255),
+                sent_at VARCHAR(100) NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS audit_ledger (
+                sequence_id BIGINT PRIMARY KEY,
+                prev_hash VARCHAR(255) NOT NULL,
+                current_hash VARCHAR(255) NOT NULL,
+                timestamp VARCHAR(100) NOT NULL,
+                actor_id VARCHAR(255) NOT NULL,
+                actor_name VARCHAR(255) NOT NULL,
+                actor_role VARCHAR(50) NOT NULL,
+                action VARCHAR(100) NOT NULL,
+                target_type VARCHAR(100) NOT NULL,
+                target_id VARCHAR(255) NOT NULL,
+                target_name VARCHAR(255) NOT NULL,
+                status VARCHAR(50) NOT NULL CHECK(status IN ('ALLOWED', 'REFUSED')),
+                ip_address VARCHAR(100) NOT NULL,
+                user_agent TEXT NOT NULL,
+                details TEXT NOT NULL,
+                signature VARCHAR(255) NOT NULL
+            );
+        """)
+        conn.commit()
+
+        # Ensure Host user exists with active admin role
+        host_email = os.environ.get("HOST_EMAIL", "23jr1a0460@gmail.com").strip().lower()
+        cursor.execute("SELECT id FROM users WHERE LOWER(email) = ?", (host_email,))
+        if not cursor.fetchone():
+            now_str = datetime.now(timezone.utc).isoformat()
+            cursor.execute("""
+                INSERT INTO users (id, username, email, full_name, role, password_hash, title, avatar_color, created_at, status, approved_by, approved_at)
+                VALUES (?, ?, ?, ?, 'admin', ?, 'Platform Host & Root Administrator', '#1e40af', ?, 'active', 'system', ?)
+            """, ("usr_host_root", "host.admin", host_email, "Platform Host", hash_password("admin123"), now_str, now_str))
+
+        conn.commit()
+        conn.close()
+
+        seed_data_if_empty()
+        return
+
     if reset and os.path.exists(DB_PATH):
         os.remove(DB_PATH)
+
 
     conn = _get_connection()
     cursor = conn.cursor()
@@ -209,7 +480,11 @@ def init_db(reset=False):
             password_hash TEXT NOT NULL,
             title TEXT NOT NULL,
             avatar_color TEXT NOT NULL,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            approval_token TEXT,
+            approved_by TEXT,
+            approved_at TEXT
         );
 
         CREATE TABLE IF NOT EXISTS documents (
@@ -285,6 +560,28 @@ def init_db(reset=False):
             signature TEXT NOT NULL
         );
     """)
+    # Dynamic migration for existing users table
+    cursor.execute("PRAGMA table_info(users)")
+    existing_cols = [c["name"] for c in cursor.fetchall()]
+    if "status" not in existing_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'active'")
+    if "approval_token" not in existing_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN approval_token TEXT")
+    if "approved_by" not in existing_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN approved_by TEXT")
+    if "approved_at" not in existing_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN approved_at TEXT")
+
+    # Ensure Host user exists with active admin role
+    host_email = os.environ.get("HOST_EMAIL", "23jr1a0460@gmail.com").strip().lower()
+    cursor.execute("SELECT id FROM users WHERE LOWER(email) = ?", (host_email,))
+    if not cursor.fetchone():
+        now_str = datetime.now(timezone.utc).isoformat()
+        cursor.execute("""
+            INSERT INTO users (id, username, email, full_name, role, password_hash, title, avatar_color, created_at, status, approved_by, approved_at)
+            VALUES (?, ?, ?, ?, 'admin', ?, 'Platform Host & Root Administrator', '#1e40af', ?, 'active', 'system', ?)
+        """, ("usr_host_root", "host.admin", host_email, "Platform Host", hash_password("admin123"), now_str, now_str))
+
     conn.commit()
     conn.close()
 

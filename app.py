@@ -11,6 +11,65 @@ from werkzeug.utils import secure_filename
 from flask import Flask, request, jsonify, session, send_file, send_from_directory
 
 import database
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+def get_smtp_config():
+    server = os.environ.get("SMTP_SERVER", "").strip()
+    port_raw = os.environ.get("SMTP_PORT", "587").strip()
+    try:
+        port = int(port_raw)
+    except ValueError:
+        port = 587
+    username = os.environ.get("SMTP_USERNAME", "").strip()
+    password = os.environ.get("SMTP_PASSWORD", "").strip()
+    sender = os.environ.get("SMTP_SENDER", "").strip() or username or "no-reply@trustvault.security"
+    use_tls = os.environ.get("SMTP_USE_TLS", "true").lower() in ("true", "1", "yes")
+    configured = bool(server and password)
+    return {
+        "configured": configured,
+        "server": server,
+        "port": port,
+        "username": username,
+        "password": password,
+        "sender": sender,
+        "use_tls": use_tls
+    }
+
+def send_email_notification(recipient, subject, text_content, html_content=None):
+    """
+    Delivers a real transactional security email via SMTP (e.g. Gmail, SendGrid, Outlook, SES).
+    Falls back gracefully if SMTP credentials are not configured in environment variables.
+    """
+    cfg = get_smtp_config()
+    if not cfg["configured"]:
+        return False, "SMTP not configured (SMTP_SERVER or SMTP_PASSWORD missing). Simulated delivery recorded."
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = cfg["sender"]
+        msg["To"] = recipient
+
+        msg.attach(MIMEText(text_content, "plain", "utf-8"))
+        if html_content:
+            msg.attach(MIMEText(html_content, "html", "utf-8"))
+
+        if cfg["port"] == 465:
+            with smtplib.SMTP_SSL(cfg["server"], cfg["port"], timeout=10) as s:
+                s.login(cfg["username"], cfg["password"])
+                s.send_message(msg)
+        else:
+            with smtplib.SMTP(cfg["server"], cfg["port"], timeout=10) as s:
+                if cfg["use_tls"]:
+                    s.starttls()
+                s.login(cfg["username"], cfg["password"])
+                s.send_message(msg)
+
+        return True, f"Email delivered successfully to {recipient} via {cfg['server']}:{cfg['port']}"
+    except Exception as e:
+        return False, f"SMTP delivery error: {str(e)}"
 
 app = Flask(__name__, static_folder="static", static_url_path="")
 app.secret_key = "TRUSTVAULT_SESSION_SECRET_KEY_v2026_SECURITY_GRADE"
@@ -204,45 +263,213 @@ def auth_signup():
         field = "Username" if existing["username"].lower() == username else "Email"
         return jsonify({"error": f"{field} is already registered. Please log in or use another {field.lower()}."}), 409
 
+    HOST_EMAIL = os.environ.get("HOST_EMAIL", "23jr1a0460@gmail.com").strip().lower()
+    is_host = (email == HOST_EMAIL)
+
     user_id = f"usr_{role}_{uuid.uuid4().hex[:8]}"
     pwd_hash = database.hash_password(password)
     now = datetime.now(timezone.utc).isoformat()
 
+    if is_host:
+        status = "active"
+        approval_token = None
+        approved_by = "system_host"
+        approved_at = now
+    else:
+        status = "pending_approval"
+        approval_token = f"appr_{secrets.token_hex(20)}"
+        approved_by = None
+        approved_at = None
+
     cursor.execute("""
-        INSERT INTO users (id, username, email, full_name, role, password_hash, title, avatar_color, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (user_id, username, email, full_name, role, pwd_hash, title, avatar_color, now))
+        INSERT INTO users (id, username, email, full_name, role, password_hash, title, avatar_color, created_at, status, approval_token, approved_by, approved_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (user_id, username, email, full_name, role, pwd_hash, title, avatar_color, now, status, approval_token, approved_by, approved_at))
     conn.commit()
     conn.close()
 
-    # Auto log-in new user
-    session["user_id"] = user_id
+    role_labels = {"admin": "Administrator", "owner": "Document owner", "viewer": "Viewer"}
+    role_name = role_labels.get(role, role)
 
-    # Append to tamper-evident audit ledger
+    if is_host:
+        session["user_id"] = user_id
+        database.record_audit_event(
+            actor_id=user_id,
+            actor_name=full_name,
+            actor_role=role,
+            action="USER_SIGNUP_HOST_ACTIVE",
+            target_type="USER",
+            target_id=user_id,
+            target_name=username,
+            status="ALLOWED",
+            ip_address=get_client_ip(),
+            user_agent=request.user_agent.string,
+            details={"email": email, "role": role, "status": "active"}
+        )
+        welcome_subject = "Welcome to TrustVault - Host Administrator Activated"
+        welcome_body = f"Welcome {full_name}! Your Host Administrator account has been activated."
+        send_email_notification(email, welcome_subject, welcome_body)
+        return jsonify({
+            "message": f"Host Administrator account activated successfully for {full_name}",
+            "status": "active",
+            "user": {
+                "id": user_id,
+                "username": username,
+                "email": email,
+                "full_name": full_name,
+                "role": role,
+                "status": "active"
+            }
+        }), 201
+
+    # Approval required workflow:
+    # 1. Administrator: forwarded ONLY to the host 23jr1a0460@gmail.com
+    # 2. Document owner: forwarded to Administrators
+    # 3. Viewer: forwarded to Administrators and Document Owners
+    conn = database.get_db()
+    cursor = conn.cursor()
+
+    if role == "admin":
+        approver_emails = [HOST_EMAIL]
+        approver_label = "the Host (23jr1a0460@gmail.com)"
+    elif role == "owner":
+        cursor.execute("SELECT DISTINCT email FROM users WHERE role = 'admin' AND status = 'active'")
+        approver_emails = [r["email"] for r in cursor.fetchall() if r["email"]]
+        if HOST_EMAIL not in approver_emails:
+            approver_emails.append(HOST_EMAIL)
+        approver_label = "System Administrators"
+    else: # viewer
+        cursor.execute("SELECT DISTINCT email FROM users WHERE role IN ('admin', 'owner') AND status = 'active'")
+        approver_emails = [r["email"] for r in cursor.fetchall() if r["email"]]
+        if HOST_EMAIL not in approver_emails:
+            approver_emails.append(HOST_EMAIL)
+        approver_label = "Administrators and Document Owners"
+
+    conn.close()
+
+    base_url = request.host_url.rstrip("/")
+    approve_url = f"{base_url}/api/auth/approve-signup?token={approval_token}"
+    reject_url = f"{base_url}/api/auth/reject-signup?token={approval_token}"
+
+    approval_subject = f"TrustVault Authorization Request: New {role_name} Sign Up ({full_name})"
+    approval_body = f"""TRUSTVAULT ACCESS AUTHORIZATION REQUEST
+==================================================
+A new user has submitted registration requesting the role of {role_name.upper()}.
+
+Candidate Details:
+- Full Name: {full_name}
+- Username: {username}
+- Email Address: {email}
+- Requested Role: {role_name}
+- Position / Title: {title}
+- Registration Time: {now}
+- Origin IP: {get_client_ip()}
+
+ACTION REQUIRED:
+To APPROVE this user and activate their {role_name} access, click:
+{approve_url}
+
+To REJECT this request, click:
+{reject_url}
+"""
+
+    approval_html = f"""<!DOCTYPE html>
+<html>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background-color:#eff6ff; color:#0f172a; padding:24px;">
+  <div style="max-width:560px; margin:0 auto; background:#ffffff; border:1px solid #bfdbfe; border-radius:12px; overflow:hidden;">
+    <div style="background:#1e40af; color:#ffffff; padding:24px; text-align:center;">
+      <h1 style="margin:0; font-size:20px; font-weight:700;">TRUSTVAULT</h1>
+      <p style="margin:6px 0 0; font-size:13px; color:#bfdbfe;">Keep your File Safe and Secure</p>
+    </div>
+    <div style="padding:28px;">
+      <h2 style="font-size:18px; margin-top:0; color:#1e40af;">New Access Authorization Request</h2>
+      <p style="font-size:14px; color:#334155;">A user has registered on TrustVault and requires approval to activate their account as <strong>{role_name}</strong>.</p>
+      
+      <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:16px; margin:20px 0;">
+        <table style="width:100%; font-size:13px; color:#334155; line-height:1.8;">
+          <tr><td><strong>Full Name:</strong></td><td>{full_name}</td></tr>
+          <tr><td><strong>Requested Role:</strong></td><td><span style="background:#eff6ff; border:1px solid #3b82f6; color:#1e40af; padding:2px 8px; border-radius:12px; font-weight:700;">{role_name}</span></td></tr>
+          <tr><td><strong>Username:</strong></td><td>{username}</td></tr>
+          <tr><td><strong>Email:</strong></td><td>{email}</td></tr>
+          <tr><td><strong>Title:</strong></td><td>{title}</td></tr>
+          <tr><td><strong>Timestamp:</strong></td><td>{now}</td></tr>
+        </table>
+      </div>
+
+      <div style="margin-top:24px;">
+        <a href="{approve_url}" style="display:inline-block; background:#2563eb; color:#ffffff; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:700; font-size:14px;">Approve Registration</a>
+        <a href="{reject_url}" style="display:inline-block; background:#ffffff; color:#dc2626; border:1px solid #f87171; padding:12px 20px; border-radius:6px; text-decoration:none; font-weight:600; font-size:14px; margin-left:12px;">Decline</a>
+      </div>
+    </div>
+    <div style="background:#f8fafc; border-top:1px solid #e2e8f0; padding:14px; text-align:center; font-size:12px; color:#64748b;">
+      TrustVault Authorization Engine &bull; Automated Dispatch
+    </div>
+  </div>
+</body>
+</html>"""
+
+    # Dispatch to all approvers
+    for recipient in approver_emails:
+        send_email_notification(recipient, approval_subject, approval_body, approval_html)
+
+    # Dispatch receipt confirmation to applicant
+    ack_subject = f"TrustVault Registration Received - Pending {role_name} Approval"
+    ack_body = f"""Hello {full_name},
+
+Thank you for registering on TrustVault.
+
+Your request for the role of {role_name.upper()} has been received and forwarded to {approver_label} for authorization.
+
+Once approved, you will receive an email confirmation and will be able to log in with your username ({username}) and password.
+"""
+    ack_html = f"""<!DOCTYPE html>
+<html>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background-color:#eff6ff; color:#0f172a; padding:24px;">
+  <div style="max-width:540px; margin:0 auto; background:#ffffff; border:1px solid #bfdbfe; border-radius:12px; overflow:hidden;">
+    <div style="background:#1e40af; color:#ffffff; padding:24px; text-align:center;">
+      <h1 style="margin:0; font-size:20px; font-weight:700;">TRUSTVAULT</h1>
+      <p style="margin:6px 0 0; font-size:13px; color:#bfdbfe;">Keep your File Safe and Secure</p>
+    </div>
+    <div style="padding:28px;">
+      <h2 style="font-size:18px; margin-top:0; color:#1e40af;">Registration Received</h2>
+      <p style="font-size:14px; color:#334155;">Hello <strong>{full_name}</strong>,</p>
+      <p style="font-size:14px; color:#334155;">Your request to register as <strong>{role_name}</strong> has been submitted. For security compliance, this account requires authorization from <strong>{approver_label}</strong>.</p>
+      <div style="background:#eff6ff; border:1px solid #93c5fd; border-radius:8px; padding:14px; margin:16px 0; font-size:13px; color:#1e40af;">
+        Status: <strong>Pending Authorization</strong><br>
+        You will receive an email alert as soon as your account is approved.
+      </div>
+    </div>
+  </div>
+</body>
+</html>"""
+    send_email_notification(email, ack_subject, ack_body, ack_html)
+
+    # Record audit event
     database.record_audit_event(
         actor_id=user_id,
         actor_name=full_name,
         actor_role=role,
-        action="USER_SIGNUP",
+        action="USER_SIGNUP_PENDING_APPROVAL",
         target_type="USER",
         target_id=user_id,
         target_name=username,
         status="ALLOWED",
         ip_address=get_client_ip(),
         user_agent=request.user_agent.string,
-        details={"email": email, "role": role, "title": title}
+        details={"email": email, "role": role, "approvers": approver_label}
     )
 
     return jsonify({
-        "message": f"Account created successfully for {full_name} ({role})",
+        "status": "pending_approval",
+        "message": f"Registration submitted! Authorization required by {approver_label}. An authorization email has been forwarded.",
+        "approver_label": approver_label,
         "user": {
             "id": user_id,
             "username": username,
             "email": email,
             "full_name": full_name,
             "role": role,
-            "title": title,
-            "avatar_color": avatar_color
+            "status": "pending_approval"
         }
     }), 201
 
@@ -323,6 +550,27 @@ def auth_login():
 
     if not user:
         return jsonify({"error": "Account not found"}), 404
+
+    user_status = user["status"] if "status" in user.keys() else "active"
+    if user_status == "pending_approval":
+        role_labels = {"admin": "Administrator", "owner": "Document owner", "viewer": "Viewer"}
+        role_name = role_labels.get(user["role"], user["role"])
+        if user["role"] == "admin":
+            reason = "Administrator accounts must be approved by the host (23jr1a0460@gmail.com)."
+        elif user["role"] == "owner":
+            reason = "Document Owner accounts must be approved by an Administrator."
+        else:
+            reason = "Viewer accounts must be approved by an Administrator or Document Owner."
+        return jsonify({
+            "error": f"Account Pending Approval: {reason} You will receive an email once authorized.",
+            "pending_approval": True,
+            "role": user["role"]
+        }), 403
+
+    if user_status == "rejected":
+        return jsonify({
+            "error": "Account Request Declined: Your registration request was declined by an administrator."
+        }), 403
 
     session["user_id"] = user["id"]
 
@@ -437,6 +685,49 @@ All password reset requests are recorded in the immutable SHA-256 audit ledger.
     conn.commit()
     conn.close()
 
+    email_html = f"""<!DOCTYPE html>
+<html>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background-color:#f8fafc; color:#0f172a; margin:0; padding:24px;">
+  <div style="max-width:560px; margin:0 auto; background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden;">
+    <div style="background:#1e40af; color:#ffffff; padding:24px; text-align:center;">
+      <h1 style="margin:0; font-size:20px; font-weight:700;">TRUSTVAULT ZERO-TRUST SECURITY</h1>
+      <p style="margin:6px 0 0; font-size:13px; color:#93c5fd;">Cryptographic Access & Identity Management</p>
+    </div>
+    <div style="padding:32px 28px;">
+      <h2 style="font-size:17px; margin-top:0; color:#1e293b;">Password Reset Verification Code</h2>
+      <p style="font-size:14px; line-height:1.6; color:#334155;">
+        Hello <strong>{user['full_name']}</strong>,<br><br>
+        A password reset request was initiated for your TrustVault identity:
+      </p>
+      <ul style="font-size:13px; color:#475569; padding-left:20px; line-height:1.8;">
+        <li><strong>Username:</strong> {user['username']}</li>
+        <li><strong>Assigned Role:</strong> {user['role'].upper()}</li>
+        <li><strong>Timestamp:</strong> {now_str}</li>
+      </ul>
+      <div style="background:#eff6ff; border:2px dashed #3b82f6; border-radius:8px; padding:20px; text-align:center; margin:24px 0;">
+        <div style="font-size:11px; text-transform:uppercase; font-weight:700; color:#2563eb; letter-spacing:1px; margin-bottom:6px;">Cryptographic Verification Token</div>
+        <div style="font-family:'Consolas','Courier New',monospace; font-size:26px; font-weight:700; color:#1e40af; letter-spacing:2px;">{reset_token}</div>
+        <div style="font-size:13px; color:#64748b; margin-top:8px;">Expires in 60 minutes. Enter this token on the reset screen.</div>
+      </div>
+      <div style="background:#fef2f2; border-left:4px solid #ef4444; padding:12px 16px; border-radius:4px; font-size:12px; color:#991b1b;">
+        <strong>SECURITY WARNING:</strong> If you did not request this password reset, your credentials may be targeted. All actions are cryptographically sealed in the SHA-256 audit ledger.
+      </div>
+    </div>
+    <div style="background:#f8fafc; border-top:1px solid #e2e8f0; padding:16px; text-align:center; font-size:12px; color:#94a3b8;">
+      TrustVault Security Subsystem &bull; Automated Dispatch &bull; Do Not Reply
+    </div>
+  </div>
+</body>
+</html>"""
+
+    # Dispatch real email via SMTP if configured
+    email_delivered, delivery_msg = send_email_notification(
+        recipient=user["email"],
+        subject=email_subject,
+        text_content=email_body,
+        html_content=email_html
+    )
+
     # Record event in immutable audit ledger
     database.record_audit_event(
         actor_id=user["id"],
@@ -449,13 +740,21 @@ All password reset requests are recorded in the immutable SHA-256 audit ledger.
         status="ALLOWED",
         ip_address=get_client_ip(),
         user_agent=request.user_agent.string,
-        details={"email": user["email"], "token_id": reset_id, "expires_at": expires_str}
+        details={
+            "email": user["email"],
+            "token_id": reset_id,
+            "expires_at": expires_str,
+            "real_email_sent": email_delivered,
+            "delivery_status": delivery_msg
+        }
     )
 
     return jsonify({
         "message": f"Password reset email successfully dispatched to {user['email']}",
         "email": user["email"],
         "token": reset_token,
+        "email_sent": email_delivered,
+        "delivery_info": delivery_msg,
         "preview": {
             "recipient": user["email"],
             "subject": email_subject,
@@ -571,6 +870,342 @@ def auth_logout():
         )
     session.clear()
     return jsonify({"message": "Logged out successfully"})
+
+@app.route("/api/auth/test-email", methods=["POST"])
+def auth_test_email():
+    """
+    Diagnostics endpoint to test real SMTP email connectivity.
+    Sends a test verification email to the provided address or logged-in user.
+    """
+    data = request.get_json() or {}
+    user = get_current_user()
+    recipient = (data.get("email") or (user["email"] if user else "")).strip().lower()
+
+    if not recipient or "@" not in recipient:
+        return jsonify({"error": "Please provide a valid recipient email address"}), 400
+
+    cfg = get_smtp_config()
+    if not cfg["configured"]:
+        return jsonify({
+            "configured": False,
+            "message": "SMTP is not yet configured. Please set SMTP_SERVER, SMTP_PORT, SMTP_USERNAME, and SMTP_PASSWORD in your .env file or environment variables.",
+            "guide": {
+                "smtp_server": "e.g. smtp.gmail.com (for Gmail) or smtp.sendgrid.net",
+                "smtp_port": "587 (STARTTLS) or 465 (SSL)",
+                "smtp_username": "your_email@gmail.com",
+                "smtp_password": "Google 16-character App Password"
+            }
+        }), 400
+
+    test_subject = "TrustVault SMTP Diagnostics: Real Mailbox Connectivity Verified"
+    test_body = f"""TRUSTVAULT SMTP VERIFICATION DISPATCH
+==================================================
+Timestamp: {datetime.now(timezone.utc).isoformat()}
+Recipient: {recipient}
+SMTP Server: {cfg['server']}:{cfg['port']}
+
+SUCCESS: Your TrustVault installation is properly connected to your email service!
+All password reset tokens and security alerts will now be delivered directly to real user inboxes.
+"""
+    test_html = f"""<div style="font-family:sans-serif; max-width:520px; padding:24px; border:1px solid #3b82f6; border-radius:8px; background:#ffffff;">
+<div style="background:#1e40af; color:#ffffff; padding:12px 16px; border-radius:6px; font-weight:700; margin-bottom:16px;">
+  TRUSTVAULT ZERO-TRUST: SMTP CONNECTIVITY VERIFIED
+</div>
+<h3 style="color:#0f172a; margin-top:0;">Real Mailbox Delivery Operational</h3>
+<p style="color:#334155; font-size:14px;">Your mail service connection is active and successfully authenticated.</p>
+<ul style="color:#475569; font-size:13px; line-height:1.8;">
+  <li><strong>SMTP Host:</strong> {cfg['server']}:{cfg['port']}</li>
+  <li><strong>Target Recipient:</strong> {recipient}</li>
+  <li><strong>Sender Identity:</strong> {cfg['sender']}</li>
+</ul>
+<div style="background:#ecfdf5; border:1px solid #10b981; color:#065f46; padding:10px 14px; border-radius:6px; font-size:13px; font-weight:600;">
+  Verification tokens and security dispatches will now be delivered to genuine email inboxes.
+</div>
+</div>"""
+
+    success, msg = send_email_notification(recipient, test_subject, test_body, test_html)
+    return jsonify({
+        "configured": True,
+        "success": success,
+        "message": msg,
+        "smtp_server": cfg["server"],
+        "smtp_port": cfg["port"],
+        "recipient": recipient
+    }), (200 if success else 500)
+
+@app.route("/api/auth/approve-signup", methods=["GET", "POST"])
+def auth_approve_signup():
+    """
+    Approves a pending signup via the one-click cryptographic link sent in the forwarding email.
+    """
+    token = request.args.get("token") or (request.get_json() or {}).get("token")
+    if not token:
+        return "Missing approval token", 400
+
+    conn = database.get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE approval_token = ?", (token,))
+    user = cursor.fetchone()
+
+    if not user:
+        conn.close()
+        html_expired = """<!DOCTYPE html>
+<html>
+<head><title>TrustVault - Link Expired</title>
+<style>
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #eff6ff; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; color: #1e3a8a; }
+.card { background: #ffffff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 36px; max-width: 480px; text-align: center; box-shadow: 0 10px 25px -5px rgba(30,58,138,0.1); }
+h2 { color: #1e40af; margin-top: 0; }
+a { display: inline-block; margin-top: 20px; background: #2563eb; color: #ffffff; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 600; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h2>Authorization Link Expired</h2>
+    <p>This approval link is invalid or has already been used.</p>
+    <a href="/">Go to TrustVault Portal</a>
+  </div>
+</body>
+</html>"""
+        if request.method == "GET" and not request.headers.get("Accept", "").startswith("application/json"):
+            return html_expired, 400
+        return jsonify({"error": "Invalid or expired authorization token"}), 400
+
+    now_str = datetime.now(timezone.utc).isoformat()
+    cursor.execute("""
+        UPDATE users 
+        SET status = 'active', approval_token = NULL, approved_by = 'email_authorization_link', approved_at = ?
+        WHERE id = ?
+    """, (now_str, user["id"]))
+    conn.commit()
+    conn.close()
+
+    database.record_audit_event(
+        actor_id="email_approver",
+        actor_name="Authorized Approver",
+        actor_role="approver",
+        action="ACCOUNT_APPROVED",
+        target_type="USER",
+        target_id=user["id"],
+        target_name=user["username"],
+        status="ALLOWED",
+        ip_address=get_client_ip(),
+        user_agent=request.user_agent.string,
+        details={"approved_user": user["username"], "email": user["email"], "role": user["role"]}
+    )
+
+    role_labels = {"admin": "Administrator", "owner": "Document owner", "viewer": "Viewer"}
+    role_name = role_labels.get(user["role"], user["role"])
+    approved_subject = f"TrustVault Authorization Approved: Your {role_name} Account is Active"
+    approved_body = f"""Hello {user['full_name']},
+
+Your TrustVault account has been approved and activated for the role of {role_name}.
+Username: {user['username']}
+Email: {user['email']}
+
+You can now log in at any time to access the vault.
+"""
+    approved_html = f"""<!DOCTYPE html>
+<html>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background-color:#eff6ff; color:#0f172a; padding:24px;">
+  <div style="max-width:540px; margin:0 auto; background:#ffffff; border:1px solid #bfdbfe; border-radius:12px; overflow:hidden;">
+    <div style="background:#1e40af; color:#ffffff; padding:24px; text-align:center;">
+      <h1 style="margin:0; font-size:20px; font-weight:700;">TRUSTVAULT</h1>
+      <p style="margin:6px 0 0; font-size:13px; color:#bfdbfe;">Keep your File Safe and Secure</p>
+    </div>
+    <div style="padding:28px;">
+      <h2 style="font-size:18px; margin-top:0; color:#1e40af;">Account Approved and Activated</h2>
+      <p style="font-size:14px; color:#334155;">Hello <strong>{user['full_name']}</strong>,</p>
+      <p style="font-size:14px; color:#334155;">Your registration request as <strong>{role_name}</strong> has been officially approved. Your account is now active.</p>
+      <div style="background:#eff6ff; border:1px solid #93c5fd; border-radius:8px; padding:16px; margin:20px 0;">
+        <div style="font-size:13px; color:#1e40af;"><strong>Username:</strong> {user['username']}</div>
+        <div style="font-size:13px; color:#1e40af; margin-top:4px;"><strong>Assigned Role:</strong> {role_name}</div>
+      </div>
+      <p style="font-size:14px; color:#334155;">You may now return to the login screen and sign in with your credentials.</p>
+    </div>
+  </div>
+</body>
+</html>"""
+    send_email_notification(user["email"], approved_subject, approved_body, approved_html)
+
+    if request.method == "GET" and not request.headers.get("Accept", "").startswith("application/json"):
+        return f"""<!DOCTYPE html>
+<html>
+<head><title>TrustVault - User Approved</title>
+<style>
+body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #eff6ff; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; color: #1e3a8a; }}
+.card {{ background: #ffffff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 36px; max-width: 500px; text-align: center; box-shadow: 0 10px 25px -5px rgba(30,58,138,0.1); }}
+h2 {{ color: #1e40af; margin-top: 0; }}
+p {{ font-size: 15px; color: #334155; line-height: 1.6; }}
+.badge {{ display: inline-block; background: #eff6ff; border: 1px solid #3b82f6; color: #1e40af; padding: 6px 14px; border-radius: 20px; font-weight: 700; margin: 12px 0; }}
+a {{ display: inline-block; margin-top: 24px; background: #2563eb; color: #ffffff; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: 600; }}
+a:hover {{ background: #1d4ed8; }}
+</style>
+</head>
+<body>
+  <div class="card">
+    <h2>Account Approved Successfully</h2>
+    <p>User <strong>{user['full_name']}</strong> ({user['username']}) has been granted access to TrustVault.</p>
+    <div><span class="badge">Role: {role_name}</span></div>
+    <p>An activation notice has been dispatched to <strong>{user['email']}</strong>.</p>
+    <a href="/">Go to TrustVault Portal</a>
+  </div>
+</body>
+</html>"""
+
+    return jsonify({"success": True, "message": f"User {user['username']} ({role_name}) approved successfully."})
+
+@app.route("/api/auth/reject-signup", methods=["GET", "POST"])
+def auth_reject_signup():
+    token = request.args.get("token") or (request.get_json() or {}).get("token")
+    if not token:
+        return "Missing token", 400
+
+    conn = database.get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE approval_token = ?", (token,))
+    user = cursor.fetchone()
+
+    if not user:
+        conn.close()
+        return "Invalid or expired authorization link", 400
+
+    now_str = datetime.now(timezone.utc).isoformat()
+    cursor.execute("""
+        UPDATE users 
+        SET status = 'rejected', approval_token = NULL, approved_by = 'declined', approved_at = ?
+        WHERE id = ?
+    """, (now_str, user["id"]))
+    conn.commit()
+    conn.close()
+
+    database.record_audit_event(
+        actor_id="email_approver",
+        actor_name="Authorized Approver",
+        actor_role="approver",
+        action="ACCOUNT_REJECTED",
+        target_type="USER",
+        target_id=user["id"],
+        target_name=user["username"],
+        status="ALLOWED",
+        ip_address=get_client_ip(),
+        user_agent=request.user_agent.string,
+        details={"rejected_user": user["username"], "email": user["email"], "role": user["role"]}
+    )
+
+    if request.method == "GET":
+        return f"""<!DOCTYPE html>
+<html>
+<head><title>TrustVault - Request Declined</title>
+<style>
+body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #eff6ff; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; color: #1e3a8a; }}
+.card {{ background: #ffffff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 36px; max-width: 480px; text-align: center; box-shadow: 0 10px 25px -5px rgba(30,58,138,0.1); }}
+h2 {{ color: #1e40af; margin-top: 0; }}
+p {{ font-size: 15px; color: #334155; line-height: 1.6; }}
+a {{ display: inline-block; margin-top: 20px; background: #2563eb; color: #ffffff; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 600; }}
+</style>
+</head>
+<body>
+  <div class="card">
+    <h2>Registration Declined</h2>
+    <p>The account request for <strong>{user['full_name']}</strong> ({user['username']}) has been declined and recorded in the audit ledger.</p>
+    <a href="/">Go to TrustVault Portal</a>
+  </div>
+</body>
+</html>"""
+
+    return jsonify({"success": True, "message": "Account request declined."})
+
+@app.route("/api/auth/pending-approvals", methods=["GET"])
+def get_pending_approvals():
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    HOST_EMAIL = os.environ.get("HOST_EMAIL", "23jr1a0460@gmail.com").strip().lower()
+    is_host = (current_user["email"].lower() == HOST_EMAIL)
+
+    conn = database.get_db()
+    cursor = conn.cursor()
+
+    if is_host:
+        cursor.execute("SELECT id, username, email, full_name, role, title, created_at, status FROM users WHERE status = 'pending_approval' ORDER BY created_at DESC")
+    elif current_user["role"] == "admin":
+        cursor.execute("SELECT id, username, email, full_name, role, title, created_at, status FROM users WHERE status = 'pending_approval' AND role IN ('owner', 'viewer') ORDER BY created_at DESC")
+    elif current_user["role"] == "owner":
+        cursor.execute("SELECT id, username, email, full_name, role, title, created_at, status FROM users WHERE status = 'pending_approval' AND role = 'viewer' ORDER BY created_at DESC")
+    else:
+        conn.close()
+        return jsonify({"pending": []})
+
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return jsonify({"pending": rows, "can_approve": True})
+
+@app.route("/api/auth/approve-user", methods=["POST"])
+def approve_user_in_app():
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.get_json() or {}
+    user_id = data.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Missing user_id"}), 400
+
+    conn = database.get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    target_user = cursor.fetchone()
+
+    if not target_user:
+        conn.close()
+        return jsonify({"error": "User not found"}), 404
+
+    HOST_EMAIL = os.environ.get("HOST_EMAIL", "23jr1a0460@gmail.com").strip().lower()
+    is_host = (current_user["email"].lower() == HOST_EMAIL)
+
+    target_role = target_user["role"]
+    if target_role == "admin" and not is_host:
+        conn.close()
+        return jsonify({"error": "Only the Host (23jr1a0460@gmail.com) can approve Administrator registrations"}), 403
+    if target_role == "owner" and not (is_host or current_user["role"] == "admin"):
+        conn.close()
+        return jsonify({"error": "Only Administrators can approve Document Owner registrations"}), 403
+    if target_role == "viewer" and not (is_host or current_user["role"] in ("admin", "owner")):
+        conn.close()
+        return jsonify({"error": "Only Administrators or Document Owners can approve Viewer registrations"}), 403
+
+    now_str = datetime.now(timezone.utc).isoformat()
+    cursor.execute("""
+        UPDATE users 
+        SET status = 'active', approval_token = NULL, approved_by = ?, approved_at = ?
+        WHERE id = ?
+    """, (current_user["id"], now_str, user_id))
+    conn.commit()
+    conn.close()
+
+    database.record_audit_event(
+        actor_id=current_user["id"],
+        actor_name=current_user["full_name"],
+        actor_role=current_user["role"],
+        action="ACCOUNT_APPROVED",
+        target_type="USER",
+        target_id=target_user["id"],
+        target_name=target_user["username"],
+        status="ALLOWED",
+        ip_address=get_client_ip(),
+        user_agent=request.user_agent.string,
+        details={"approved_by": current_user["full_name"], "user": target_user["username"], "role": target_user["role"]}
+    )
+
+    role_labels = {"admin": "Administrator", "owner": "Document owner", "viewer": "Viewer"}
+    role_name = role_labels.get(target_user["role"], target_user["role"])
+    approved_subject = f"TrustVault Authorization Approved: Your {role_name} Account is Active"
+    approved_body = f"Hello {target_user['full_name']},\n\nYour TrustVault account has been approved by {current_user['full_name']}. You can now log in."
+    send_email_notification(target_user["email"], approved_subject, approved_body)
+
+    return jsonify({"success": True, "message": f"User {target_user['username']} ({role_name}) approved successfully."})
 
 @app.route("/api/users", methods=["GET"])
 def list_users():
