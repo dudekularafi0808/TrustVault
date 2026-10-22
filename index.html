@@ -1731,9 +1731,6 @@
             </div>
           </div>
 
-          <button class="btn-secondary nav-desktop-only" onclick="openPersonaSwitchModal()" title="Switch User or Role">
-            Switch
-          </button>
           <button class="btn-danger nav-desktop-only" onclick="logout()" title="Logout and return to Login as page">
             Logout
           </button>
@@ -1764,9 +1761,6 @@
           </button>
           <button class="mobile-drawer-btn" onclick="openSpecModal(); toggleMobileMenu();">
             Security Architecture Spec
-          </button>
-          <button class="mobile-drawer-btn" onclick="openPersonaSwitchModal(); toggleMobileMenu();">
-            Switch Active Persona
           </button>
           <button class="mobile-drawer-btn logout" onclick="logout(); toggleMobileMenu();">
             Sign Out
@@ -2480,7 +2474,19 @@
           return;
         } else {
           if (errBox) {
-            errBox.textContent = data.error || 'Invalid credentials or role mismatch';
+            if (data.permission_expired) {
+              errBox.innerHTML = `
+                <div style="width:100%; text-align:left;">
+                  <div style="font-weight:700; color:#b91c1c; margin-bottom:4px;">7-Day Permission Expired</div>
+                  <div style="font-size:0.8rem; color:#475569; margin-bottom:8px;">${escapeHtml(data.error || 'Your 7-day access period has concluded.')}</div>
+                  <button type="button" class="btn-primary" style="width:100%; justify-content:center; padding:8px; font-size:0.82rem;" onclick="renewUserPermission('${escapeHtml(username)}', '${escapeHtml(password)}')">
+                    Renew 7-Day Permission Now
+                  </button>
+                </div>
+              `;
+            } else {
+              errBox.textContent = data.error || 'Invalid credentials or role mismatch';
+            }
             errBox.style.display = 'flex';
           }
           return;
@@ -2566,19 +2572,14 @@
         const data = await res.json();
         if (submitBtn) submitBtn.disabled = false;
 
-        if (res.ok) {
-          if (data.status === 'pending_approval') {
-            closeModal('signUpModal');
-            alert(data.message || 'Registration submitted! Your details have been forwarded for authorization. Once permission is granted, your account will be activated.');
-            return;
-          }
-          if (data.user) {
-            currentUser = data.user;
-            closeModal('signUpModal');
-            showDashboard();
-            alert(`Welcome to TrustVault, ${data.user.full_name}!\nYour account was created in the database with role: ${data.user.role.toUpperCase()}`);
-            return;
-          }
+        if (res.ok && data.user) {
+          currentUser = data.user;
+          closeModal('signUpModal');
+          showDashboard();
+          loadUsers();
+          const expDate = data.permission_expires_at ? new Date(data.permission_expires_at).toLocaleDateString() : '7 days';
+          alert(`Welcome to TrustVault, ${data.user.full_name}!\nYour account is active with 7-Day Permission (Valid until ${expDate}).\nYou can log in and out freely with your username and password.`);
+          return;
         } else {
           if (errBox) {
             errBox.textContent = data.error || 'Error creating account';
@@ -2837,15 +2838,26 @@
       avatar.textContent = currentUser.full_name.charAt(0);
       avatar.style.backgroundColor = currentUser.avatar_color || '#2563eb';
       nameLabel.textContent = currentUser.full_name;
-      roleLabel.textContent = currentUser.role;
+
+      let expInfo = '';
+      if (currentUser.permission_expires_at) {
+        try {
+          const expDate = new Date(currentUser.permission_expires_at);
+          const diffDays = Math.ceil((expDate - new Date()) / (1000 * 60 * 60 * 24));
+          if (diffDays > 0) expInfo = ` (${diffDays}d active)`;
+        } catch(e) {}
+      }
+
+      roleLabel.textContent = currentUser.role.toUpperCase() + expInfo;
+      roleLabel.className = 'user-role-label ' + (currentUser.role === 'admin' ? 'role-admin-text' : (currentUser.role === 'owner' ? 'role-owner-text' : 'role-viewer-text'));
 
       if (mobName) mobName.textContent = currentUser.full_name;
       if (mobRole) {
-        mobRole.textContent = currentUser.role.toUpperCase();
+        mobRole.textContent = currentUser.role.toUpperCase() + expInfo;
         mobRole.className = 'user-role-label ' + (currentUser.role === 'admin' ? 'role-admin-text' : (currentUser.role === 'owner' ? 'role-owner-text' : 'role-viewer-text'));
       }
 
-      roleLabel.className = 'user-role-label ' + (currentUser.role === 'admin' ? 'role-admin-text' : (currentUser.role === 'owner' ? 'role-owner-text' : 'role-viewer-text'));
+      loadUsers();
 
       const uploadBtn = document.getElementById('uploadBtn');
       if (uploadBtn) {
@@ -2876,14 +2888,54 @@
     function populateGrantUserDropdown() {
       const select = document.getElementById('grantUserSelect');
       if (!select) return;
-      select.innerHTML = '<option value="">Select user to grant access...</option>';
+      select.innerHTML = '<option value="">Select recipient to grant document access...</option>';
       cachedUsers.forEach(u => {
         if (currentUser && u.id === currentUser.id) return;
         const opt = document.createElement('option');
         opt.value = u.id;
-        opt.textContent = `${u.full_name} (${u.role.toUpperCase()} - ${u.title})`;
+        
+        let powerDesc = '';
+        if (u.role === 'viewer') {
+          powerDesc = 'VIEWER (Confidential Read-Only Access)';
+        } else if (u.role === 'owner') {
+          powerDesc = 'OWNER (Upload & Discretionary Access Control)';
+        } else if (u.role === 'admin') {
+          powerDesc = 'ADMIN (System Governance & Audit Oversight)';
+        } else {
+          powerDesc = u.role.toUpperCase();
+        }
+
+        opt.textContent = `${u.full_name} (@${u.username}) — [${powerDesc}] - ${u.title || 'Member'}`;
         select.appendChild(opt);
       });
+    }
+
+    async function renewUserPermission(username, password) {
+      const errBox = document.getElementById('roleLoginError');
+      try {
+        const res = await fetch('/api/auth/renew-permission', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: username, password: password })
+        });
+        const data = await res.json();
+        if (res.ok && data.user) {
+          currentUser = data.user;
+          closeModal('roleLoginModal');
+          showDashboard();
+          alert('7-Day Access Permission successfully renewed! Welcome back.');
+        } else {
+          if (errBox) {
+            errBox.textContent = data.error || 'Failed to renew permission';
+            errBox.style.display = 'flex';
+          }
+        }
+      } catch (e) {
+        if (errBox) {
+          errBox.textContent = 'Network error renewing permission';
+          errBox.style.display = 'flex';
+        }
+      }
     }
 
     function openPersonaSwitchModal() {
@@ -3086,6 +3138,7 @@
 
       if (isOwner || isAdmin) {
         permSection.style.display = 'block';
+        loadUsers();
         renderPermissionsRoster(doc.permissions || [], isOwner);
       } else {
         permSection.style.display = 'none';

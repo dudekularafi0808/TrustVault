@@ -369,7 +369,8 @@ def init_db(reset=False):
                 status VARCHAR(50) NOT NULL DEFAULT 'active',
                 approval_token VARCHAR(255),
                 approved_by VARCHAR(255),
-                approved_at VARCHAR(100)
+                approved_at VARCHAR(100),
+                permission_expires_at VARCHAR(100)
             );
 
             CREATE TABLE IF NOT EXISTS documents (
@@ -484,7 +485,8 @@ def init_db(reset=False):
             status TEXT NOT NULL DEFAULT 'active',
             approval_token TEXT,
             approved_by TEXT,
-            approved_at TEXT
+            approved_at TEXT,
+            permission_expires_at TEXT
         );
 
         CREATE TABLE IF NOT EXISTS documents (
@@ -571,6 +573,8 @@ def init_db(reset=False):
         cursor.execute("ALTER TABLE users ADD COLUMN approved_by TEXT")
     if "approved_at" not in existing_cols:
         cursor.execute("ALTER TABLE users ADD COLUMN approved_at TEXT")
+    if "permission_expires_at" not in existing_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN permission_expires_at TEXT")
 
     # Ensure Host user exists with active admin role
     host_email = os.environ.get("HOST_EMAIL", "23jr1a0460@gmail.com").strip().lower()

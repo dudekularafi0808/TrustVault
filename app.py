@@ -73,6 +73,7 @@ def send_email_notification(recipient, subject, text_content, html_content=None)
 
 app = Flask(__name__, static_folder="static", static_url_path="")
 app.secret_key = "TRUSTVAULT_SESSION_SECRET_KEY_v2026_SECURITY_GRADE"
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
 UPLOADS_DIR = database.UPLOADS_DIR
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 
@@ -268,208 +269,59 @@ def auth_signup():
 
     user_id = f"usr_{role}_{uuid.uuid4().hex[:8]}"
     pwd_hash = database.hash_password(password)
-    now = datetime.now(timezone.utc).isoformat()
+    now_dt = datetime.now(timezone.utc)
+    now = now_dt.isoformat()
+    permission_expires_at = (now_dt + timedelta(days=7)).isoformat()
 
-    if is_host:
-        status = "active"
-        approval_token = None
-        approved_by = "system_host"
-        approved_at = now
-    else:
-        status = "pending_approval"
-        approval_token = f"appr_{secrets.token_hex(20)}"
-        approved_by = None
-        approved_at = None
+    status = "active"
+    approved_by = "system_7day_grant" if not is_host else "system_host"
+    approved_at = now
 
     cursor.execute("""
-        INSERT INTO users (id, username, email, full_name, role, password_hash, title, avatar_color, created_at, status, approval_token, approved_by, approved_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (user_id, username, email, full_name, role, pwd_hash, title, avatar_color, now, status, approval_token, approved_by, approved_at))
+        INSERT INTO users (id, username, email, full_name, role, password_hash, title, avatar_color, created_at, status, approval_token, approved_by, approved_at, permission_expires_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (user_id, username, email, full_name, role, pwd_hash, title, avatar_color, now, status, None, approved_by, approved_at, permission_expires_at))
     conn.commit()
     conn.close()
+
+    session["user_id"] = user_id
+    session.permanent = True
 
     role_labels = {"admin": "Administrator", "owner": "Document owner", "viewer": "Viewer"}
     role_name = role_labels.get(role, role)
 
-    if is_host:
-        session["user_id"] = user_id
-        database.record_audit_event(
-            actor_id=user_id,
-            actor_name=full_name,
-            actor_role=role,
-            action="USER_SIGNUP_HOST_ACTIVE",
-            target_type="USER",
-            target_id=user_id,
-            target_name=username,
-            status="ALLOWED",
-            ip_address=get_client_ip(),
-            user_agent=request.user_agent.string,
-            details={"email": email, "role": role, "status": "active"}
-        )
-        welcome_subject = "Welcome to TrustVault - Host Administrator Activated"
-        welcome_body = f"Welcome {full_name}! Your Host Administrator account has been activated."
-        send_email_notification(email, welcome_subject, welcome_body)
-        return jsonify({
-            "message": f"Host Administrator account activated successfully for {full_name}",
-            "status": "active",
-            "user": {
-                "id": user_id,
-                "username": username,
-                "email": email,
-                "full_name": full_name,
-                "role": role,
-                "status": "active"
-            }
-        }), 201
-
-    # Approval required workflow:
-    # 1. Administrator: forwarded ONLY to the host 23jr1a0460@gmail.com
-    # 2. Document owner: forwarded to Administrators
-    # 3. Viewer: forwarded to Administrators and Document Owners
-    conn = database.get_db()
-    cursor = conn.cursor()
-
-    if role == "admin":
-        approver_emails = [HOST_EMAIL]
-        approver_label = "the Host (23jr1a0460@gmail.com)"
-    elif role == "owner":
-        cursor.execute("SELECT DISTINCT email FROM users WHERE role = 'admin' AND status = 'active'")
-        approver_emails = [r["email"] for r in cursor.fetchall() if r["email"]]
-        if HOST_EMAIL not in approver_emails:
-            approver_emails.append(HOST_EMAIL)
-        approver_label = "System Administrators"
-    else: # viewer
-        cursor.execute("SELECT DISTINCT email FROM users WHERE role IN ('admin', 'owner') AND status = 'active'")
-        approver_emails = [r["email"] for r in cursor.fetchall() if r["email"]]
-        if HOST_EMAIL not in approver_emails:
-            approver_emails.append(HOST_EMAIL)
-        approver_label = "Administrators and Document Owners"
-
-    conn.close()
-
-    base_url = request.host_url.rstrip("/")
-    approve_url = f"{base_url}/api/auth/approve-signup?token={approval_token}"
-    reject_url = f"{base_url}/api/auth/reject-signup?token={approval_token}"
-
-    approval_subject = f"TrustVault Authorization Request: New {role_name} Sign Up ({full_name})"
-    approval_body = f"""TRUSTVAULT ACCESS AUTHORIZATION REQUEST
-==================================================
-A new user has submitted registration requesting the role of {role_name.upper()}.
-
-Candidate Details:
-- Full Name: {full_name}
-- Username: {username}
-- Email Address: {email}
-- Requested Role: {role_name}
-- Position / Title: {title}
-- Registration Time: {now}
-- Origin IP: {get_client_ip()}
-
-ACTION REQUIRED:
-To APPROVE this user and activate their {role_name} access, click:
-{approve_url}
-
-To REJECT this request, click:
-{reject_url}
-"""
-
-    approval_html = f"""<!DOCTYPE html>
-<html>
-<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background-color:#eff6ff; color:#0f172a; padding:24px;">
-  <div style="max-width:560px; margin:0 auto; background:#ffffff; border:1px solid #bfdbfe; border-radius:12px; overflow:hidden;">
-    <div style="background:#1e40af; color:#ffffff; padding:24px; text-align:center;">
-      <h1 style="margin:0; font-size:20px; font-weight:700;">TRUSTVAULT</h1>
-      <p style="margin:6px 0 0; font-size:13px; color:#bfdbfe;">Keep your File Safe and Secure</p>
-    </div>
-    <div style="padding:28px;">
-      <h2 style="font-size:18px; margin-top:0; color:#1e40af;">New Access Authorization Request</h2>
-      <p style="font-size:14px; color:#334155;">A user has registered on TrustVault and requires approval to activate their account as <strong>{role_name}</strong>.</p>
-      
-      <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:16px; margin:20px 0;">
-        <table style="width:100%; font-size:13px; color:#334155; line-height:1.8;">
-          <tr><td><strong>Full Name:</strong></td><td>{full_name}</td></tr>
-          <tr><td><strong>Requested Role:</strong></td><td><span style="background:#eff6ff; border:1px solid #3b82f6; color:#1e40af; padding:2px 8px; border-radius:12px; font-weight:700;">{role_name}</span></td></tr>
-          <tr><td><strong>Username:</strong></td><td>{username}</td></tr>
-          <tr><td><strong>Email:</strong></td><td>{email}</td></tr>
-          <tr><td><strong>Title:</strong></td><td>{title}</td></tr>
-          <tr><td><strong>Timestamp:</strong></td><td>{now}</td></tr>
-        </table>
-      </div>
-
-      <div style="margin-top:24px;">
-        <a href="{approve_url}" style="display:inline-block; background:#2563eb; color:#ffffff; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:700; font-size:14px;">Approve Registration</a>
-        <a href="{reject_url}" style="display:inline-block; background:#ffffff; color:#dc2626; border:1px solid #f87171; padding:12px 20px; border-radius:6px; text-decoration:none; font-weight:600; font-size:14px; margin-left:12px;">Decline</a>
-      </div>
-    </div>
-    <div style="background:#f8fafc; border-top:1px solid #e2e8f0; padding:14px; text-align:center; font-size:12px; color:#64748b;">
-      TrustVault Authorization Engine &bull; Automated Dispatch
-    </div>
-  </div>
-</body>
-</html>"""
-
-    # Dispatch to all approvers
-    for recipient in approver_emails:
-        send_email_notification(recipient, approval_subject, approval_body, approval_html)
-
-    # Dispatch receipt confirmation to applicant
-    ack_subject = f"TrustVault Registration Received - Pending {role_name} Approval"
-    ack_body = f"""Hello {full_name},
-
-Thank you for registering on TrustVault.
-
-Your request for the role of {role_name.upper()} has been received and forwarded to {approver_label} for authorization.
-
-Once approved, you will receive an email confirmation and will be able to log in with your username ({username}) and password.
-"""
-    ack_html = f"""<!DOCTYPE html>
-<html>
-<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background-color:#eff6ff; color:#0f172a; padding:24px;">
-  <div style="max-width:540px; margin:0 auto; background:#ffffff; border:1px solid #bfdbfe; border-radius:12px; overflow:hidden;">
-    <div style="background:#1e40af; color:#ffffff; padding:24px; text-align:center;">
-      <h1 style="margin:0; font-size:20px; font-weight:700;">TRUSTVAULT</h1>
-      <p style="margin:6px 0 0; font-size:13px; color:#bfdbfe;">Keep your File Safe and Secure</p>
-    </div>
-    <div style="padding:28px;">
-      <h2 style="font-size:18px; margin-top:0; color:#1e40af;">Registration Received</h2>
-      <p style="font-size:14px; color:#334155;">Hello <strong>{full_name}</strong>,</p>
-      <p style="font-size:14px; color:#334155;">Your request to register as <strong>{role_name}</strong> has been submitted. For security compliance, this account requires authorization from <strong>{approver_label}</strong>.</p>
-      <div style="background:#eff6ff; border:1px solid #93c5fd; border-radius:8px; padding:14px; margin:16px 0; font-size:13px; color:#1e40af;">
-        Status: <strong>Pending Authorization</strong><br>
-        You will receive an email alert as soon as your account is approved.
-      </div>
-    </div>
-  </div>
-</body>
-</html>"""
-    send_email_notification(email, ack_subject, ack_body, ack_html)
-
-    # Record audit event
     database.record_audit_event(
         actor_id=user_id,
         actor_name=full_name,
         actor_role=role,
-        action="USER_SIGNUP_PENDING_APPROVAL",
+        action="USER_SIGNUP_7DAY_ACTIVE",
         target_type="USER",
         target_id=user_id,
         target_name=username,
         status="ALLOWED",
         ip_address=get_client_ip(),
         user_agent=request.user_agent.string,
-        details={"email": email, "role": role, "approvers": approver_label}
+        details={"email": email, "role": role, "permission_duration": "7_days", "expires_at": permission_expires_at}
     )
 
+    welcome_subject = f"Welcome to TrustVault - {role_name} Access Active (7 Days)"
+    welcome_body = f"Welcome {full_name}!\n\nYour {role_name} account has been activated with 7 days of full access (valid until {permission_expires_at[:10]}).\nYou can log in and out freely with your username ({username}) and password."
+    send_email_notification(email, welcome_subject, welcome_body)
+
     return jsonify({
-        "status": "pending_approval",
-        "message": f"Registration submitted! Authorization required by {approver_label}. An authorization email has been forwarded.",
-        "approver_label": approver_label,
+        "message": f"Account registered and activated for 7 days! Welcome to TrustVault, {full_name}.",
+        "status": "active",
+        "permission_expires_at": permission_expires_at,
         "user": {
             "id": user_id,
             "username": username,
             "email": email,
             "full_name": full_name,
             "role": role,
-            "status": "pending_approval"
+            "title": title,
+            "avatar_color": avatar_color,
+            "status": "active",
+            "permission_expires_at": permission_expires_at
         }
     }), 201
 
@@ -552,27 +404,58 @@ def auth_login():
         return jsonify({"error": "Account not found"}), 404
 
     user_status = user["status"] if "status" in user.keys() else "active"
-    if user_status == "pending_approval":
-        role_labels = {"admin": "Administrator", "owner": "Document owner", "viewer": "Viewer"}
-        role_name = role_labels.get(user["role"], user["role"])
-        if user["role"] == "admin":
-            reason = "Administrator accounts must be approved by the host (23jr1a0460@gmail.com)."
-        elif user["role"] == "owner":
-            reason = "Document Owner accounts must be approved by an Administrator."
-        else:
-            reason = "Viewer accounts must be approved by an Administrator or Document Owner."
-        return jsonify({
-            "error": f"Account Pending Approval: {reason} You will receive an email once authorized.",
-            "pending_approval": True,
-            "role": user["role"]
-        }), 403
-
     if user_status == "rejected":
         return jsonify({
             "error": "Account Request Declined: Your registration request was declined by an administrator."
         }), 403
 
+    user_expires = user["permission_expires_at"] if "permission_expires_at" in user.keys() else None
+    now_dt = datetime.now(timezone.utc)
+
+    # Check 7-day permission expiry
+    if user_expires:
+        try:
+            exp_dt = datetime.fromisoformat(str(user_expires).replace("Z", "+00:00"))
+            if exp_dt.tzinfo is None:
+                exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+            if now_dt > exp_dt:
+                conn = database.get_db()
+                cursor = conn.cursor()
+                cursor.execute("UPDATE users SET status = 'permission_expired' WHERE id = ?", (user["id"],))
+                conn.commit()
+                conn.close()
+                return jsonify({
+                    "error": f"7-Day Access Permission Expired: Your access permission expired on {str(user_expires)[:10]}. Please renew your permission.",
+                    "permission_expired": True,
+                    "user_id": user["id"],
+                    "username": user["username"],
+                    "role": user["role"]
+                }), 403
+        except Exception:
+            pass
+
+    if user_status == "permission_expired":
+        return jsonify({
+            "error": "7-Day Access Permission Expired: Your access permission has concluded. Please renew your permission.",
+            "permission_expired": True,
+            "user_id": user["id"],
+            "username": user["username"],
+            "role": user["role"]
+        }), 403
+
+    # If user has pending_approval or NULL expiry, auto-grant 7-day permission
+    if user_status == "pending_approval" or not user_expires:
+        new_exp = (now_dt + timedelta(days=7)).isoformat()
+        conn = database.get_db()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE users SET status = 'active', permission_expires_at = ? WHERE id = ?", (new_exp, user["id"]))
+        conn.commit()
+        conn.close()
+        user_status = "active"
+        user_expires = new_exp
+
     session["user_id"] = user["id"]
+    session.permanent = True
 
     database.record_audit_event(
         actor_id=user["id"],
@@ -585,11 +468,12 @@ def auth_login():
         status="ALLOWED",
         ip_address=get_client_ip(),
         user_agent=request.user_agent.string,
-        details={"login_mode": "credentials" if identifier else "direct", "role": user["role"]}
+        details={"login_mode": "credentials" if identifier else "direct", "role": user["role"], "permission_expires_at": user_expires}
     )
 
     return jsonify({
         "message": f"Authenticated successfully as {user['full_name']} ({user['role']})",
+        "permission_expires_at": user_expires,
         "user": {
             "id": user["id"],
             "username": user["username"],
@@ -597,9 +481,88 @@ def auth_login():
             "full_name": user["full_name"],
             "role": user["role"],
             "title": user["title"],
-            "avatar_color": user["avatar_color"]
+            "avatar_color": user["avatar_color"],
+            "status": "active",
+            "permission_expires_at": user_expires
         }
     })
+
+@app.route("/api/auth/renew-permission", methods=["POST"])
+def renew_permission():
+    """
+    Renews a user's 7-day access permission upon expiry or request.
+    """
+    data = request.get_json() or {}
+    identifier = (data.get("username") or data.get("identifier") or "").strip().lower()
+    password = data.get("password")
+    user_id = data.get("user_id")
+
+    conn = database.get_db()
+    cursor = conn.cursor()
+
+    user = None
+    if identifier and password:
+        cursor.execute("SELECT * FROM users WHERE LOWER(username) = ? OR LOWER(email) = ?", (identifier, identifier))
+        cand = cursor.fetchone()
+        if cand and database.verify_password(password, cand["password_hash"]):
+            user = cand
+    elif user_id:
+        cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        user = cursor.fetchone()
+    elif session.get("user_id"):
+        cursor.execute("SELECT * FROM users WHERE id = ?", (session.get("user_id"),))
+        user = cursor.fetchone()
+
+    if not user:
+        conn.close()
+        return jsonify({"error": "Account verification failed. Please enter your valid username and password to renew."}), 401
+
+    now_dt = datetime.now(timezone.utc)
+    new_expiry = (now_dt + timedelta(days=7)).isoformat()
+    now_str = now_dt.isoformat()
+
+    cursor.execute("""
+        UPDATE users 
+        SET status = 'active', permission_expires_at = ?, approved_at = ?
+        WHERE id = ?
+    """, (new_expiry, now_str, user["id"]))
+    conn.commit()
+    conn.close()
+
+    session["user_id"] = user["id"]
+    session.permanent = True
+
+    database.record_audit_event(
+        actor_id=user["id"],
+        actor_name=user["full_name"],
+        actor_role=user["role"],
+        action="PERMISSION_RENEWED_7DAYS",
+        target_type="USER",
+        target_id=user["id"],
+        target_name=user["username"],
+        status="ALLOWED",
+        ip_address=get_client_ip(),
+        user_agent=request.user_agent.string,
+        details={"message": "Permission renewed for 7 days", "new_expires_at": new_expiry}
+    )
+
+    return jsonify({
+        "success": True,
+        "message": f"7-Day permission renewed successfully! Access valid until {new_expiry[:10]}.",
+        "permission_expires_at": new_expiry,
+        "user": {
+            "id": user["id"],
+            "username": user["username"],
+            "email": user["email"],
+            "full_name": user["full_name"],
+            "role": user["role"],
+            "title": user["title"],
+            "avatar_color": user["avatar_color"],
+            "status": "active",
+            "permission_expires_at": new_expiry
+        }
+    })
+
 
 @app.route("/api/auth/forgot-password", methods=["POST"])
 def auth_forgot_password():
@@ -1209,14 +1172,28 @@ def approve_user_in_app():
 
 @app.route("/api/users", methods=["GET"])
 def list_users():
-    """List all potential collaborators to grant permissions to."""
+    """List all registered vault members categorized by role and authorization privileges."""
     user = get_current_user()
     if not user:
         return jsonify({"error": "Authentication required"}), 401
 
+    role_filter = request.args.get("role")
     conn = database.get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, username, email, full_name, role, title, avatar_color FROM users ORDER BY full_name ASC")
+    if role_filter:
+        cursor.execute("""
+            SELECT id, username, email, full_name, role, title, avatar_color, status, permission_expires_at 
+            FROM users 
+            WHERE LOWER(role) = ? AND status != 'rejected'
+            ORDER BY full_name ASC
+        """, (role_filter.lower(),))
+    else:
+        cursor.execute("""
+            SELECT id, username, email, full_name, role, title, avatar_color, status, permission_expires_at 
+            FROM users 
+            WHERE status != 'rejected'
+            ORDER BY full_name ASC
+        """)
     users = [dict(r) for r in cursor.fetchall()]
     conn.close()
     return jsonify({"users": users})
