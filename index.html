@@ -2594,34 +2594,14 @@
         }
       } catch (err) {
         if (submitBtn) submitBtn.disabled = false;
-      }
-
-      // Offline client fallback
-      const exists = localStore.users.find(u => u.username === username || u.email === email);
-      if (exists) {
+        console.error('Sign up error:', err);
         if (errBox) {
-          errBox.textContent = 'Username or email already registered.';
+          errBox.textContent = 'Unable to connect to TrustVault server. Please ensure the backend server is running.';
           errBox.style.display = 'flex';
         }
+        alert('Cannot connect to TrustVault server!\nPlease make sure the backend server (python app.py) is running on http://localhost:5000 so authorization emails can be dispatched to 23jr1a0460@gmail.com.');
         return;
       }
-
-      const newUser = {
-        id: 'usr_' + role + '_' + Math.random().toString(36).substring(2, 8),
-        username: username,
-        email: email,
-        full_name: fullName,
-        role: role,
-        title: title || (role === 'admin' ? 'System Administrator' : (role === 'owner' ? 'Document Owner' : 'Document Viewer')),
-        password: password,
-        avatar_color: role === 'admin' ? '#1e40af' : (role === 'owner' ? '#0284c7' : '#2563eb')
-      };
-
-      localStore.users.push(newUser);
-      currentUser = newUser;
-      closeModal('signUpModal');
-      showDashboard();
-      alert(`Welcome to TrustVault, ${newUser.full_name}!\nAccount created with role: ${newUser.role.toUpperCase()}`);
     }
 
     function openForgotPasswordFromLogin() {

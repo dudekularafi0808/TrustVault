@@ -18,15 +18,15 @@ from email.mime.multipart import MIMEMultipart
 def get_smtp_config():
     if hasattr(database, "_load_env_file"):
         database._load_env_file()
-    server = os.environ.get("SMTP_SERVER", "").strip()
+    server = os.environ.get("SMTP_SERVER", "").strip() or "smtp.gmail.com"
     port_raw = os.environ.get("SMTP_PORT", "587").strip()
     try:
         port = int(port_raw)
     except ValueError:
         port = 587
-    username = os.environ.get("SMTP_USERNAME", "").strip()
-    password = os.environ.get("SMTP_PASSWORD", "").strip()
-    sender = os.environ.get("SMTP_SENDER", "").strip() or username or "no-reply@trustvault.security"
+    username = os.environ.get("SMTP_USERNAME", "").strip() or "23jr1a0460@gmail.com"
+    password = os.environ.get("SMTP_PASSWORD", "").strip() or "dadgojkawkgvfyqk"
+    sender = os.environ.get("SMTP_SENDER", "").strip() or f"TrustVault Security <{username}>"
     use_tls = os.environ.get("SMTP_USE_TLS", "true").lower() in ("true", "1", "yes")
     configured = bool(server and password)
     return {
