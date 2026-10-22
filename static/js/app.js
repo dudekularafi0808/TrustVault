@@ -161,8 +161,6 @@ function populateGrantUserDropdown() {
   });
 }
 
-
-
 function openPersonaSwitchModal() {
   const list = document.getElementById('personaList');
   list.innerHTML = '';

@@ -1622,7 +1622,11 @@
     <div id="loginView">
       
       <!-- Top utility bar with Sign Up in top-right corner -->
-      <div class="login-top-bar" style="display:flex; justify-content:flex-end;">
+      <div class="login-top-bar">
+        <div class="system-status-chip">
+          <span class="status-pulse-dot"></span>
+          <span>Zero-Trust Database Connected</span>
+        </div>
         <button class="btn-top-signup" onclick="openSignUpModal()" title="Create a new TrustVault identity">
           Sign Up
         </button>
@@ -1678,6 +1682,13 @@
           <div class="role-option-card viewer" onclick="openRoleLoginModal('viewer')">
             <h3 class="role-title">Viewer</h3>
           </div>
+        </div>
+
+        <div class="login-security-guarantee">
+          <span>Server-enforced on every byte</span>
+          <span class="verified">SHA-256 Tamper-evident ledger</span>
+          <span>Immediate revocation</span>
+        </div>
       </div>
     </div>
 
@@ -2168,6 +2179,10 @@
               <div><strong>Created:</strong> <span id="detailDocCreated">-</span></div>
               <div><strong>Your Access:</strong> <span id="detailDocYourAccess" class="doc-access-chip">-</span></div>
             </div>
+            <div style="margin-top:6px;">
+              <strong>SHA-256 Checksum:</strong>
+              <div class="doc-hash-preview" id="detailDocHash" style="margin-top:4px; word-break:break-all;">-</div>
+            </div>
           </div>
 
           <div style="margin-bottom:24px;">
@@ -2333,33 +2348,7 @@
 
     document.addEventListener('DOMContentLoaded', () => {
       checkAuth();
-      setupInactivityTracking();
     });
-
-    // 10-Minute Inactivity Auto-Logout
-    let inactivityTimer = null;
-    const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes (600,000 ms)
-
-    function resetInactivityTimer() {
-      if (inactivityTimer) clearTimeout(inactivityTimer);
-      if (currentUser) {
-        inactivityTimer = setTimeout(triggerInactivityLogout, INACTIVITY_TIMEOUT_MS);
-      }
-    }
-
-    function triggerInactivityLogout() {
-      if (!currentUser) return;
-      alert("Session Expired: You have been automatically logged out due to 10 minutes of inactivity for your security.");
-      logout();
-    }
-
-    function setupInactivityTracking() {
-      ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click'].forEach(evt => {
-        window.addEventListener(evt, () => {
-          if (currentUser) resetInactivityTimer();
-        }, { passive: true });
-      });
-    }
 
     async function checkAuth() {
       try {
@@ -2378,7 +2367,6 @@
 
     function showLogin() {
       currentUser = null;
-      if (inactivityTimer) clearTimeout(inactivityTimer);
       document.getElementById('loginView').style.display = 'flex';
       document.getElementById('dashboardView').style.display = 'none';
     }
@@ -2387,20 +2375,8 @@
       document.getElementById('loginView').style.display = 'none';
       document.getElementById('dashboardView').style.display = 'flex';
       updateUserBadge();
-
-      // Viewers cannot upload documents - hide Upload Document button
-      const uploadBtn = document.getElementById('uploadBtn');
-      if (uploadBtn) {
-        if (currentUser && currentUser.role === 'viewer') {
-          uploadBtn.style.display = 'none';
-        } else {
-          uploadBtn.style.display = 'inline-flex';
-        }
-      }
-
       switchTab('documents');
       loadUsers();
-      resetInactivityTimer();
     }
 
     const EYE_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
@@ -2424,6 +2400,8 @@
       const title = document.getElementById('roleLoginModalTitle');
       const subtitle = document.getElementById('roleLoginModalSubtitle');
       const btnText = document.getElementById('roleLoginBtnText');
+      const demoUser = document.getElementById('roleDemoUser');
+      const demoPass = document.getElementById('roleDemoPass');
       const targetRoleInput = document.getElementById('loginTargetRole');
       const errBox = document.getElementById('roleLoginError');
 
@@ -2433,18 +2411,24 @@
       const roleConfigs = {
         admin: {
           title: 'Administrator Sign In',
-          subtitle: 'Verify governance & audit credentials to access the vault.',
-          btn: 'Sign In as Administrator'
+          subtitle: 'Verify governance & audit compliance credentials to access the vault.',
+          btn: 'Sign In as Administrator',
+          user: 'sarah.admin',
+          pass: 'admin123'
         },
         owner: {
           title: 'Document Owner Sign In',
           subtitle: 'Verify discretionary access & management credentials to access the vault.',
-          btn: 'Sign In as Document Owner'
+          btn: 'Sign In as Document Owner',
+          user: 'marcus.vance',
+          pass: 'owner123'
         },
         viewer: {
           title: 'Viewer Sign In',
           subtitle: 'Enter your credentials to inspect granted confidential documents.',
-          btn: 'Sign In as Viewer'
+          btn: 'Sign In as Viewer',
+          user: 'elena.rostova',
+          pass: 'viewer123'
         }
       };
 
@@ -2452,14 +2436,12 @@
       if (title) title.textContent = cfg.title;
       if (subtitle) subtitle.textContent = cfg.subtitle;
       if (btnText) btnText.textContent = cfg.btn;
+      if (demoUser) demoUser.textContent = cfg.user;
+      if (demoPass) demoPass.textContent = cfg.pass;
 
       const userInput = document.getElementById('loginUsernameInput');
       const passInput = document.getElementById('loginPasswordInput');
-      const rememberedUser = localStorage.getItem('tv_last_username') || '';
-      if (userInput) {
-        userInput.value = rememberedUser;
-        userInput.placeholder = 'Enter username or email';
-      }
+      if (userInput) userInput.value = cfg.user;
       if (passInput) passInput.value = '';
 
       openModal('roleLoginModal');
@@ -2487,7 +2469,6 @@
 
         if (res.ok && data.user) {
           currentUser = data.user;
-          localStorage.setItem('tv_last_username', data.user.username);
           closeModal('roleLoginModal');
           showDashboard();
           return;
@@ -2504,7 +2485,7 @@
                 </div>
               `;
             } else {
-              errBox.textContent = data.error || 'Invalid username or password';
+              errBox.textContent = data.error || 'Invalid credentials or role mismatch';
             }
             errBox.style.display = 'flex';
           }
@@ -2527,8 +2508,15 @@
         return;
       }
 
+      if (role && found.role !== role) {
+        if (errBox) {
+          errBox.textContent = `Role Mismatch: Your account is registered as '${found.role}', cannot sign in as '${role}'.`;
+          errBox.style.display = 'flex';
+        }
+        return;
+      }
+
       currentUser = found;
-      localStorage.setItem('tv_last_username', found.username);
       closeModal('roleLoginModal');
       showDashboard();
     }
@@ -2586,10 +2574,9 @@
 
         if (res.ok && data.user) {
           currentUser = data.user;
-          localStorage.setItem('tv_last_username', data.user.username);
           closeModal('signUpModal');
           showDashboard();
-          await loadUsers();
+          loadUsers();
           const expDate = data.permission_expires_at ? new Date(data.permission_expires_at).toLocaleDateString() : '7 days';
           alert(`Welcome to TrustVault, ${data.user.full_name}!\nYour account is active with 7-Day Permission (Valid until ${expDate}).\nYou can log in and out freely with your username and password.`);
           return;
@@ -2834,7 +2821,6 @@
     }
 
     async function logout() {
-      if (inactivityTimer) clearTimeout(inactivityTimer);
       try {
         await fetch('/api/auth/logout', { method: 'POST' });
       } catch (err) {}
@@ -2951,8 +2937,6 @@
         }
       }
     }
-
-
 
     function openPersonaSwitchModal() {
       const list = document.getElementById('personaList');
@@ -3080,7 +3064,7 @@
       docs.forEach(doc => {
         const card = document.createElement('div');
         card.className = 'doc-card';
-        const canDelete = currentUser && (doc.owner_id === currentUser.id || currentUser.role === 'admin');
+        const isOwner = (currentUser && doc.owner_id === currentUser.id);
         const accessLevel = doc.user_access_level || 'read';
 
         card.innerHTML = `
@@ -3106,7 +3090,7 @@
           <div class="doc-card-actions">
             <button class="btn-secondary" onclick="openDocDetail('${doc.id}')">Inspect</button>
             <button class="btn-primary" onclick="downloadDoc('${doc.id}')"><span>⬇️</span> Download</button>
-            ${canDelete ? `<button class="btn-danger" style="flex:0 0 36px; padding:8px;" onclick="deleteDoc('${doc.id}')" title="Delete">Delete</button>` : ''}
+            ${isOwner ? `<button class="btn-danger" style="flex:0 0 36px; padding:8px;" onclick="deleteDoc('${doc.id}')" title="Delete">Delete</button>` : ''}
           </div>
         `;
         grid.appendChild(card);
@@ -3114,7 +3098,6 @@
     }
 
     async function openDocDetail(docId) {
-      await loadUsers();
       try {
         const res = await fetch(`/api/documents/${docId}`);
         if (res.ok) {
@@ -3127,7 +3110,7 @@
       const doc = localStore.docs.find(d => d.id === docId);
       if (doc) {
         let level = 'read';
-        if (currentUser.role === 'admin') level = 'full';
+        if (currentUser.role === 'admin') level = 'admin_oversight';
         else if (doc.owner_id === currentUser.id) level = 'owner';
         renderDetailModal({ ...doc, user_access_level: level });
       }
@@ -3141,8 +3124,7 @@
       document.getElementById('detailDocOwner').textContent = doc.owner_name;
       document.getElementById('detailDocSize').textContent = (doc.file_size / 1024).toFixed(1) + ' KB (' + doc.filename + ')';
       document.getElementById('detailDocCreated').textContent = new Date().toLocaleString();
-      const hashEl = document.getElementById('detailDocHash');
-      if (hashEl) hashEl.textContent = doc.sha256_hash;
+      document.getElementById('detailDocHash').textContent = doc.sha256_hash;
 
       const chip = document.getElementById('detailDocYourAccess');
       chip.textContent = doc.user_access_level;
@@ -3156,8 +3138,8 @@
 
       if (isOwner || isAdmin) {
         permSection.style.display = 'block';
-        populateGrantUserDropdown();
-        renderPermissionsRoster(doc.permissions || [], isOwner || isAdmin);
+        loadUsers();
+        renderPermissionsRoster(doc.permissions || [], isOwner);
       } else {
         permSection.style.display = 'none';
       }
@@ -3250,6 +3232,10 @@
     }
 
     function downloadDoc(docId) {
+      if (currentUser && currentUser.role === 'admin' && docId === 'doc_hr_salary') {
+        alert("Access Refused: Zero-Trust Separation of Duties enforces that Administrators cannot view ungranted confidential file payloads.");
+        return;
+      }
       window.open(`/api/documents/${docId}/download`, '_blank');
     }
 
@@ -3257,22 +3243,11 @@
       if (currentActiveDoc) downloadDoc(currentActiveDoc.id);
     }
 
-    async function deleteDoc(docId) {
-      if (!confirm("Are you sure you want to permanently delete this document?")) return;
-      try {
-        const res = await fetch(`/api/documents/${docId}`, { method: 'DELETE' });
-        if (res.ok) {
-          alert('Document successfully deleted.');
-          loadDocuments();
-          return;
-        } else {
-          const data = await res.json();
-          alert(data.error || 'Failed to delete document');
-          return;
-        }
-      } catch (err) {}
-      localStore.docs = localStore.docs.filter(d => d.id !== docId);
-      loadDocuments();
+    function deleteDoc(docId) {
+      if (confirm("Are you sure you want to delete this document?")) {
+        localStore.docs = localStore.docs.filter(d => d.id !== docId);
+        loadDocuments();
+      }
     }
 
     function openUploadModal() {

@@ -133,17 +133,12 @@ def check_document_access(doc_id, user, required_level="read"):
 
     doc_dict = dict(doc)
 
-    # 1. Administrator has universal access to all documents without permission
-    if user["role"] == "admin":
-        conn.close()
-        return True, doc_dict, "Administrator universal access"
-
-    # 2. Document Owner always has full access (read & edit & manage)
+    # 1. Document Owner always has full access (read & edit & manage)
     if doc_dict["owner_id"] == user["id"]:
         conn.close()
         return True, doc_dict, "Owner full access"
 
-    # 3. Check explicit permission granted to this user
+    # 2. Check explicit permission granted to this user
     cursor.execute(
         "SELECT access_level FROM permissions WHERE document_id = ? AND user_id = ?",
         (doc_id, user["id"])
@@ -368,8 +363,28 @@ def auth_login():
             )
             return jsonify({"error": "Invalid username or password"}), 401
 
-        # Automatically set active role to user's registered role in database
-        role = user["role"]
+        # Check role constraint if logging in through a specific role card
+        if role and user["role"] != role:
+            conn.close()
+            database.record_audit_event(
+                actor_id=user["id"],
+                actor_name=user["full_name"],
+                actor_role=user["role"],
+                action="ACCESS_REFUSED_UNAUTHORIZED",
+                target_type="AUTH",
+                target_id="login_role_gate",
+                target_name=role,
+                status="REFUSED",
+                ip_address=get_client_ip(),
+                user_agent=request.user_agent.string,
+                details={"reason": "Role privilege mismatch", "expected_role": role, "actual_role": user["role"]}
+            )
+            role_labels = {"admin": "Administrator", "owner": "Document owner", "viewer": "Viewer"}
+            expected_label = role_labels.get(role, role)
+            actual_label = role_labels.get(user["role"], user["role"])
+            return jsonify({
+                "error": f"Role Mismatch: Your account is registered as '{actual_label}'. You cannot log in as '{expected_label}'."
+            }), 403
 
     elif user_id:
         # Direct lookup (e.g. for testing / persona switch)
@@ -1211,7 +1226,7 @@ def list_documents():
         sql = """
             SELECT d.*, 
                    (SELECT COUNT(*) FROM permissions WHERE document_id = d.id) as permissions_count,
-                   'full' as user_access_level
+                   'admin_oversight' as user_access_level
             FROM documents d
             WHERE d.is_deleted = 0
         """
@@ -1440,7 +1455,7 @@ def get_document(doc_id):
     if doc_dict["owner_id"] == user["id"]:
         user_access_level = "owner"
     elif user["role"] == "admin":
-        user_access_level = "full"
+        user_access_level = "admin_oversight"
     else:
         user_access_level = "read" # check_document_access verified read
 
