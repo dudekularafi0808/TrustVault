@@ -559,7 +559,12 @@ def auth_login():
 
     if user_status == "pending_approval":
         return jsonify({
-            "error": "Account Pending Approval: Your registration request is pending authorization by the Host (23jr1a0460@gmail.com). You will receive an email once authorized."
+            "error": "Account Pending Approval: Approval is granted ONLY after the Host (23jr1a0460@gmail.com) clicks 'Approve access 7 days'. Please wait until the Host authorizes your request."
+        }), 403
+
+    if user_status != "active":
+        return jsonify({
+            "error": "Account Not Authorized: Your account is not active. Approval from the Host is required."
         }), 403
 
     user_expires = user["permission_expires_at"] if "permission_expires_at" in user.keys() else None
@@ -1247,16 +1252,11 @@ def get_pending_approvals():
     conn = database.get_db()
     cursor = conn.cursor()
 
-    if is_host:
-        cursor.execute("SELECT id, username, email, full_name, role, title, created_at, status FROM users WHERE status = 'pending_approval' ORDER BY created_at DESC")
-    elif current_user["role"] == "admin":
-        cursor.execute("SELECT id, username, email, full_name, role, title, created_at, status FROM users WHERE status = 'pending_approval' AND role IN ('owner', 'viewer') ORDER BY created_at DESC")
-    elif current_user["role"] == "owner":
-        cursor.execute("SELECT id, username, email, full_name, role, title, created_at, status FROM users WHERE status = 'pending_approval' AND role = 'viewer' ORDER BY created_at DESC")
-    else:
+    if not is_host:
         conn.close()
-        return jsonify({"pending": []})
+        return jsonify({"pending": [], "can_approve": False})
 
+    cursor.execute("SELECT id, username, email, full_name, role, title, created_at, status FROM users WHERE status = 'pending_approval' ORDER BY created_at DESC")
     rows = [dict(r) for r in cursor.fetchall()]
     conn.close()
     return jsonify({"pending": rows, "can_approve": True})
@@ -1272,6 +1272,11 @@ def approve_user_in_app():
     if not user_id:
         return jsonify({"error": "Missing user_id"}), 400
 
+    HOST_EMAIL = os.environ.get("HOST_EMAIL", "23jr1a0460@gmail.com").strip().lower()
+    is_host = (current_user["email"].lower() == HOST_EMAIL)
+    if not is_host:
+        return jsonify({"error": "Only the Host (23jr1a0460@gmail.com) can authorize registrations."}), 403
+
     conn = database.get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
@@ -1280,20 +1285,6 @@ def approve_user_in_app():
     if not target_user:
         conn.close()
         return jsonify({"error": "User not found"}), 404
-
-    HOST_EMAIL = os.environ.get("HOST_EMAIL", "23jr1a0460@gmail.com").strip().lower()
-    is_host = (current_user["email"].lower() == HOST_EMAIL)
-
-    target_role = target_user["role"]
-    if target_role == "admin" and not is_host:
-        conn.close()
-        return jsonify({"error": "Only the Host (23jr1a0460@gmail.com) can approve Administrator registrations"}), 403
-    if target_role == "owner" and not (is_host or current_user["role"] == "admin"):
-        conn.close()
-        return jsonify({"error": "Only Administrators can approve Document Owner registrations"}), 403
-    if target_role == "viewer" and not (is_host or current_user["role"] in ("admin", "owner")):
-        conn.close()
-        return jsonify({"error": "Only Administrators or Document Owners can approve Viewer registrations"}), 403
 
     now_dt = datetime.now(timezone.utc)
     now_str = now_dt.isoformat()
