@@ -2573,6 +2573,11 @@
         if (submitBtn) submitBtn.disabled = false;
 
         if (res.ok && data.user) {
+          if (data.status === 'pending_approval') {
+            closeModal('signUpModal');
+            alert(`Registration Submitted Successfully!\n\n${data.message || 'Your request has been submitted and forwarded directly to the Host (23jr1a0460@gmail.com) for authorization. You will receive an email once approved.'}`);
+            return;
+          }
           currentUser = data.user;
           closeModal('signUpModal');
           showDashboard();

@@ -16,6 +16,8 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
 def get_smtp_config():
+    if hasattr(database, "_load_env_file"):
+        database._load_env_file()
     server = os.environ.get("SMTP_SERVER", "").strip()
     port_raw = os.environ.get("SMTP_PORT", "587").strip()
     try:
@@ -271,47 +273,194 @@ def auth_signup():
     pwd_hash = database.hash_password(password)
     now_dt = datetime.now(timezone.utc)
     now = now_dt.isoformat()
-    permission_expires_at = (now_dt + timedelta(days=7)).isoformat()
+    role_labels = {"admin": "Administrator", "owner": "Document owner", "viewer": "Viewer"}
+    role_name = role_labels.get(role, role)
 
-    status = "active"
-    approved_by = "system_7day_grant" if not is_host else "system_host"
-    approved_at = now
+    if is_host:
+        permission_expires_at = (now_dt + timedelta(days=365)).isoformat()
+        status = "active"
+        approved_by = "system_host"
+        approved_at = now
+        approval_token = None
+
+        cursor.execute("""
+            INSERT INTO users (id, username, email, full_name, role, password_hash, title, avatar_color, created_at, status, approval_token, approved_by, approved_at, permission_expires_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (user_id, username, email, full_name, role, pwd_hash, title, avatar_color, now, status, approval_token, approved_by, approved_at, permission_expires_at))
+        conn.commit()
+        conn.close()
+
+        session["user_id"] = user_id
+        session.permanent = True
+
+        database.record_audit_event(
+            actor_id=user_id,
+            actor_name=full_name,
+            actor_role=role,
+            action="HOST_SIGNUP_ACTIVE",
+            target_type="USER",
+            target_id=user_id,
+            target_name=username,
+            status="ALLOWED",
+            ip_address=get_client_ip(),
+            user_agent=request.user_agent.string,
+            details={"email": email, "role": role, "is_host": True}
+        )
+
+        welcome_subject = "Welcome Host Administrator to TrustVault"
+        welcome_body = f"Welcome {full_name}!\n\nYour Host Administrator account has been provisioned and is active.\nYou can log in and out freely with your credentials."
+        send_email_notification(email, welcome_subject, welcome_body)
+
+        return jsonify({
+            "message": f"Host Administrator account active! Welcome, {full_name}.",
+            "status": "active",
+            "permission_expires_at": permission_expires_at,
+            "user": {
+                "id": user_id,
+                "username": username,
+                "email": email,
+                "full_name": full_name,
+                "role": role,
+                "title": title,
+                "avatar_color": avatar_color,
+                "status": "active",
+                "permission_expires_at": permission_expires_at
+            }
+        }), 201
+
+    # Non-host users: status = 'pending_approval' and approval request email dispatched to HOST_EMAIL (23jr1a0460@gmail.com)
+    status = "pending_approval"
+    approval_token = f"appr_{secrets.token_hex(20)}"
+    approved_by = None
+    approved_at = None
+    permission_expires_at = None
 
     cursor.execute("""
         INSERT INTO users (id, username, email, full_name, role, password_hash, title, avatar_color, created_at, status, approval_token, approved_by, approved_at, permission_expires_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (user_id, username, email, full_name, role, pwd_hash, title, avatar_color, now, status, None, approved_by, approved_at, permission_expires_at))
+    """, (user_id, username, email, full_name, role, pwd_hash, title, avatar_color, now, status, approval_token, approved_by, approved_at, permission_expires_at))
     conn.commit()
     conn.close()
-
-    session["user_id"] = user_id
-    session.permanent = True
-
-    role_labels = {"admin": "Administrator", "owner": "Document owner", "viewer": "Viewer"}
-    role_name = role_labels.get(role, role)
 
     database.record_audit_event(
         actor_id=user_id,
         actor_name=full_name,
         actor_role=role,
-        action="USER_SIGNUP_7DAY_ACTIVE",
+        action="USER_SIGNUP_PENDING_APPROVAL",
         target_type="USER",
         target_id=user_id,
         target_name=username,
         status="ALLOWED",
         ip_address=get_client_ip(),
         user_agent=request.user_agent.string,
-        details={"email": email, "role": role, "permission_duration": "7_days", "expires_at": permission_expires_at}
+        details={"email": email, "role": role, "host_notified": HOST_EMAIL}
     )
 
-    welcome_subject = f"Welcome to TrustVault - {role_name} Access Active (7 Days)"
-    welcome_body = f"Welcome {full_name}!\n\nYour {role_name} account has been activated with 7 days of full access (valid until {permission_expires_at[:10]}).\nYou can log in and out freely with your username ({username}) and password."
-    send_email_notification(email, welcome_subject, welcome_body)
+    # Build approval and rejection URLs for the Host
+    base_url = request.host_url.rstrip("/")
+    approve_url = f"{base_url}/api/auth/approve-signup?token={approval_token}"
+    reject_url = f"{base_url}/api/auth/reject-signup?token={approval_token}"
+
+    host_subject = f"TrustVault Authorization Request: New {role_name} Registration ({full_name})"
+    host_body = f"""TRUSTVAULT ZERO-TRUST SECURITY - HOST AUTHORIZATION DISPATCH
+============================================================
+ATTENTION PLATFORM HOST ({HOST_EMAIL}):
+A new user registration requires your authorization on TrustVault:
+
+CANDIDATE INFORMATION:
+- Full Name: {full_name}
+- Username: {username}
+- Registered Email: {email}
+- Requested Role: {role_name} ({role.upper()})
+- Professional Title: {title}
+- Registration Time: {now} (UTC)
+
+ACTION REQUIRED:
+To authorize this user with 7-Day Access Permission, click:
+{approve_url}
+
+To decline this registration request, click:
+{reject_url}
+
+Security Subsystem Note: Once approved, the user will be automatically granted 7 days of full access.
+"""
+    host_html = f"""<!DOCTYPE html>
+<html>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; background-color:#f1f5f9; color:#0f172a; margin:0; padding:24px;">
+  <div style="max-width:580px; margin:0 auto; background:#ffffff; border:1px solid #cbd5e1; border-radius:12px; overflow:hidden; box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
+    <div style="background:#1e40af; color:#ffffff; padding:24px; text-align:center;">
+      <h1 style="margin:0; font-size:22px; font-weight:700; letter-spacing:0.5px;">TRUSTVAULT SECURITY</h1>
+      <p style="margin:6px 0 0; font-size:13px; color:#93c5fd;">Zero-Trust Identity Authorization Request</p>
+    </div>
+    <div style="padding:28px 24px;">
+      <div style="background:#eff6ff; border-left:4px solid #3b82f6; padding:12px 16px; border-radius:4px; margin-bottom:20px;">
+        <p style="margin:0; font-size:14px; font-weight:600; color:#1e40af;">New User Registration Awaiting Your Authorization</p>
+        <p style="margin:4px 0 0; font-size:13px; color:#3b82f6;">Host Administrator Review &bull; 7-Day Permission Grant</p>
+      </div>
+
+      <table style="width:100%; border-collapse:collapse; margin-bottom:24px; font-size:14px;">
+        <tr style="border-bottom:1px solid #e2e8f0;">
+          <td style="padding:10px 8px; color:#64748b; font-weight:600; width:38%;">Full Name</td>
+          <td style="padding:10px 8px; color:#0f172a; font-weight:700;">{full_name}</td>
+        </tr>
+        <tr style="border-bottom:1px solid #e2e8f0;">
+          <td style="padding:10px 8px; color:#64748b; font-weight:600;">Username</td>
+          <td style="padding:10px 8px; color:#0f172a; font-family:monospace; font-size:15px; font-weight:600;">{username}</td>
+        </tr>
+        <tr style="border-bottom:1px solid #e2e8f0;">
+          <td style="padding:10px 8px; color:#64748b; font-weight:600;">Candidate Email</td>
+          <td style="padding:10px 8px; color:#0f172a;"><a href="mailto:{email}" style="color:#2563eb; text-decoration:none;">{email}</a></td>
+        </tr>
+        <tr style="border-bottom:1px solid #e2e8f0;">
+          <td style="padding:10px 8px; color:#64748b; font-weight:600;">Requested Role</td>
+          <td style="padding:10px 8px;"><span style="display:inline-block; background:#dbeafe; color:#1e40af; padding:4px 10px; border-radius:12px; font-weight:700; font-size:12px;">{role_name}</span></td>
+        </tr>
+        <tr style="border-bottom:1px solid #e2e8f0;">
+          <td style="padding:10px 8px; color:#64748b; font-weight:600;">Title / Dept</td>
+          <td style="padding:10px 8px; color:#334155;">{title}</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 8px; color:#64748b; font-weight:600;">Registration Time</td>
+          <td style="padding:10px 8px; color:#64748b; font-size:12px;">{now}</td>
+        </tr>
+      </table>
+
+      <div style="text-align:center; margin:32px 0 20px 0;">
+        <a href="{approve_url}" style="display:inline-block; background:#16a34a; color:#ffffff; font-weight:700; text-decoration:none; padding:14px 28px; border-radius:8px; font-size:15px; box-shadow:0 4px 6px -1px rgba(22,163,74,0.3); margin-right:12px; margin-bottom:10px;">
+          &#10004; Approve Access (7 Days)
+        </a>
+        <a href="{reject_url}" style="display:inline-block; background:#dc2626; color:#ffffff; font-weight:700; text-decoration:none; padding:14px 28px; border-radius:8px; font-size:15px; box-shadow:0 4px 6px -1px rgba(220,38,38,0.3); margin-bottom:10px;">
+          &#10006; Decline Request
+        </a>
+      </div>
+      <p style="text-align:center; font-size:12px; color:#94a3b8; margin:0;">Clicking Approve activates the user for 7 days and delivers an activation email to their address.</p>
+    </div>
+    <div style="background:#f8fafc; border-top:1px solid #e2e8f0; padding:14px; text-align:center; font-size:12px; color:#94a3b8;">
+      TrustVault Cryptographic Security Subsystem &bull; Host Authorization
+    </div>
+  </div>
+</body>
+</html>"""
+
+    # Dispatch authorization request to HOST_EMAIL
+    host_sent, host_err = send_email_notification(HOST_EMAIL, host_subject, host_body, host_html)
+
+    # Dispatch confirmation notice to the registering user
+    user_subject = f"TrustVault Registration Received - Pending Host Authorization"
+    user_body = f"""Hello {full_name},
+
+Thank you for registering on TrustVault as a {role_name}.
+
+Your registration request has been submitted and forwarded directly to the Platform Host ({HOST_EMAIL}) for authorization.
+
+Once approved by the Host, you will receive an activation email with 7 days of full access, allowing you to log in anytime with your credentials ({username}).
+"""
+    send_email_notification(email, user_subject, user_body)
 
     return jsonify({
-        "message": f"Account registered and activated for 7 days! Welcome to TrustVault, {full_name}.",
-        "status": "active",
-        "permission_expires_at": permission_expires_at,
+        "message": f"Registration submitted! Your request has been forwarded to the Host ({HOST_EMAIL}) for authorization. You will receive an email once approved.",
+        "status": "pending_approval",
+        "email_sent_to_host": host_sent,
         "user": {
             "id": user_id,
             "username": username,
@@ -320,8 +469,7 @@ def auth_signup():
             "role": role,
             "title": title,
             "avatar_color": avatar_color,
-            "status": "active",
-            "permission_expires_at": permission_expires_at
+            "status": "pending_approval"
         }
     }), 201
 
@@ -409,6 +557,11 @@ def auth_login():
             "error": "Account Request Declined: Your registration request was declined by an administrator."
         }), 403
 
+    if user_status == "pending_approval":
+        return jsonify({
+            "error": "Account Pending Approval: Your registration request is pending authorization by the Host (23jr1a0460@gmail.com). You will receive an email once authorized."
+        }), 403
+
     user_expires = user["permission_expires_at"] if "permission_expires_at" in user.keys() else None
     now_dt = datetime.now(timezone.utc)
 
@@ -443,12 +596,12 @@ def auth_login():
             "role": user["role"]
         }), 403
 
-    # If user has pending_approval or NULL expiry, auto-grant 7-day permission
-    if user_status == "pending_approval" or not user_expires:
+    # For active users who do not have an expiry set yet (e.g. initial demo accounts), grant 7-day permission
+    if not user_expires and user_status == "active":
         new_exp = (now_dt + timedelta(days=7)).isoformat()
         conn = database.get_db()
         cursor = conn.cursor()
-        cursor.execute("UPDATE users SET status = 'active', permission_expires_at = ? WHERE id = ?", (new_exp, user["id"]))
+        cursor.execute("UPDATE users SET permission_expires_at = ? WHERE id = ?", (new_exp, user["id"]))
         conn.commit()
         conn.close()
         user_status = "active"
@@ -934,12 +1087,14 @@ a { display: inline-block; margin-top: 20px; background: #2563eb; color: #ffffff
             return html_expired, 400
         return jsonify({"error": "Invalid or expired authorization token"}), 400
 
-    now_str = datetime.now(timezone.utc).isoformat()
+    now_dt = datetime.now(timezone.utc)
+    now_str = now_dt.isoformat()
+    permission_expires_at = (now_dt + timedelta(days=7)).isoformat()
     cursor.execute("""
         UPDATE users 
-        SET status = 'active', approval_token = NULL, approved_by = 'email_authorization_link', approved_at = ?
+        SET status = 'active', approval_token = NULL, approved_by = 'email_authorization_link', approved_at = ?, permission_expires_at = ?
         WHERE id = ?
-    """, (now_str, user["id"]))
+    """, (now_str, permission_expires_at, user["id"]))
     conn.commit()
     conn.close()
 
@@ -954,19 +1109,19 @@ a { display: inline-block; margin-top: 20px; background: #2563eb; color: #ffffff
         status="ALLOWED",
         ip_address=get_client_ip(),
         user_agent=request.user_agent.string,
-        details={"approved_user": user["username"], "email": user["email"], "role": user["role"]}
+        details={"approved_user": user["username"], "email": user["email"], "role": user["role"], "permission_expires_at": permission_expires_at}
     )
 
     role_labels = {"admin": "Administrator", "owner": "Document owner", "viewer": "Viewer"}
     role_name = role_labels.get(user["role"], user["role"])
-    approved_subject = f"TrustVault Authorization Approved: Your {role_name} Account is Active"
+    approved_subject = f"TrustVault Authorization Approved: Your {role_name} Account is Active (7 Days)"
     approved_body = f"""Hello {user['full_name']},
 
-Your TrustVault account has been approved and activated for the role of {role_name}.
+Your TrustVault account has been approved and activated for the role of {role_name} with 7-Day Access Permission (valid until {permission_expires_at[:10]}).
 Username: {user['username']}
 Email: {user['email']}
 
-You can now log in at any time to access the vault.
+You can now log in at any time with your credentials.
 """
     approved_html = f"""<!DOCTYPE html>
 <html>
@@ -979,12 +1134,13 @@ You can now log in at any time to access the vault.
     <div style="padding:28px;">
       <h2 style="font-size:18px; margin-top:0; color:#1e40af;">Account Approved and Activated</h2>
       <p style="font-size:14px; color:#334155;">Hello <strong>{user['full_name']}</strong>,</p>
-      <p style="font-size:14px; color:#334155;">Your registration request as <strong>{role_name}</strong> has been officially approved. Your account is now active.</p>
+      <p style="font-size:14px; color:#334155;">Your registration request as <strong>{role_name}</strong> has been officially approved. Your account is now active with 7-Day Access Permission.</p>
       <div style="background:#eff6ff; border:1px solid #93c5fd; border-radius:8px; padding:16px; margin:20px 0;">
         <div style="font-size:13px; color:#1e40af;"><strong>Username:</strong> {user['username']}</div>
         <div style="font-size:13px; color:#1e40af; margin-top:4px;"><strong>Assigned Role:</strong> {role_name}</div>
+        <div style="font-size:13px; color:#16a34a; font-weight:700; margin-top:4px;"><strong>Permission Duration:</strong> 7 Days (Valid until {permission_expires_at[:10]})</div>
       </div>
-      <p style="font-size:14px; color:#334155;">You may now return to the login screen and sign in with your credentials.</p>
+      <p style="font-size:14px; color:#334155;">You may now return to the login screen and sign in with your username and password.</p>
     </div>
   </div>
 </body>
@@ -1008,7 +1164,7 @@ a:hover {{ background: #1d4ed8; }}
 <body>
   <div class="card">
     <h2>Account Approved Successfully</h2>
-    <p>User <strong>{user['full_name']}</strong> ({user['username']}) has been granted access to TrustVault.</p>
+    <p>User <strong>{user['full_name']}</strong> ({user['username']}) has been granted 7-day access to TrustVault (valid until {permission_expires_at[:10]}).</p>
     <div><span class="badge">Role: {role_name}</span></div>
     <p>An activation notice has been dispatched to <strong>{user['email']}</strong>.</p>
     <a href="/">Go to TrustVault Portal</a>
@@ -1016,7 +1172,7 @@ a:hover {{ background: #1d4ed8; }}
 </body>
 </html>"""
 
-    return jsonify({"success": True, "message": f"User {user['username']} ({role_name}) approved successfully."})
+    return jsonify({"success": True, "message": f"User {user['username']} ({role_name}) approved successfully with 7-day access.", "permission_expires_at": permission_expires_at})
 
 @app.route("/api/auth/reject-signup", methods=["GET", "POST"])
 def auth_reject_signup():
@@ -1139,12 +1295,14 @@ def approve_user_in_app():
         conn.close()
         return jsonify({"error": "Only Administrators or Document Owners can approve Viewer registrations"}), 403
 
-    now_str = datetime.now(timezone.utc).isoformat()
+    now_dt = datetime.now(timezone.utc)
+    now_str = now_dt.isoformat()
+    permission_expires_at = (now_dt + timedelta(days=7)).isoformat()
     cursor.execute("""
         UPDATE users 
-        SET status = 'active', approval_token = NULL, approved_by = ?, approved_at = ?
+        SET status = 'active', approval_token = NULL, approved_by = ?, approved_at = ?, permission_expires_at = ?
         WHERE id = ?
-    """, (current_user["id"], now_str, user_id))
+    """, (current_user["id"], now_str, permission_expires_at, user_id))
     conn.commit()
     conn.close()
 
@@ -1159,16 +1317,16 @@ def approve_user_in_app():
         status="ALLOWED",
         ip_address=get_client_ip(),
         user_agent=request.user_agent.string,
-        details={"approved_by": current_user["full_name"], "user": target_user["username"], "role": target_user["role"]}
+        details={"approved_by": current_user["full_name"], "user": target_user["username"], "role": target_user["role"], "permission_expires_at": permission_expires_at}
     )
 
     role_labels = {"admin": "Administrator", "owner": "Document owner", "viewer": "Viewer"}
     role_name = role_labels.get(target_user["role"], target_user["role"])
-    approved_subject = f"TrustVault Authorization Approved: Your {role_name} Account is Active"
-    approved_body = f"Hello {target_user['full_name']},\n\nYour TrustVault account has been approved by {current_user['full_name']}. You can now log in."
+    approved_subject = f"TrustVault Authorization Approved: Your {role_name} Account is Active (7 Days)"
+    approved_body = f"Hello {target_user['full_name']},\n\nYour TrustVault account has been approved by {current_user['full_name']} with 7-Day Access Permission (valid until {permission_expires_at[:10]}). You can now log in at any time with your credentials."
     send_email_notification(target_user["email"], approved_subject, approved_body)
 
-    return jsonify({"success": True, "message": f"User {target_user['username']} ({role_name}) approved successfully."})
+    return jsonify({"success": True, "message": f"User {target_user['username']} ({role_name}) approved successfully with 7-day access.", "permission_expires_at": permission_expires_at})
 
 @app.route("/api/users", methods=["GET"])
 def list_users():
