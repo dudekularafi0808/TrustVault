@@ -76,6 +76,7 @@ async function loginAsUser(userId) {
     const data = await res.json();
     if (res.ok) {
       currentUser = data.user;
+      closeModal('personaSwitchModal');
       showDashboard();
     } else {
       alert(data.error || 'Persona switch failed');
@@ -161,6 +162,50 @@ function populateGrantUserDropdown() {
 }
 
 
+
+function openPersonaSwitchModal() {
+  const list = document.getElementById('personaList');
+  list.innerHTML = '';
+
+  cachedUsers.forEach(u => {
+    const isCurrent = currentUser && currentUser.id === u.id;
+    const item = document.createElement('div');
+    item.className = 'role-option-card ' + u.role;
+    item.style.padding = '14px 18px';
+    item.style.flexDirection = 'row';
+    item.style.alignItems = 'center';
+    item.style.justifyContent = 'space-between';
+    item.style.cursor = isCurrent ? 'default' : 'pointer';
+    if (isCurrent) {
+      item.style.borderColor = 'var(--accent-blue)';
+      item.style.background = '#eff6ff';
+    }
+
+    item.innerHTML = `
+      <div style="display:flex; align-items:center; gap:12px; text-align:left;">
+        <div class="user-avatar" style="background:${u.avatar_color}; width:34px; height:34px; font-size:0.9rem;">
+          ${u.full_name.charAt(0)}
+        </div>
+        <div>
+          <div style="font-weight:700; color:var(--text-main); font-size:0.9rem;">${u.full_name} ${isCurrent ? '<span style="color:var(--accent-blue); font-size:0.75rem;">(Active)</span>' : ''}</div>
+          <div style="font-size:0.75rem; color:var(--text-muted);">${u.title} &bull; <strong style="text-transform:uppercase;">${u.role}</strong></div>
+        </div>
+      </div>
+      <div>
+        ${isCurrent 
+          ? '<span class="std-badge std2">Current</span>' 
+          : '<button class="btn-secondary" style="font-size:0.78rem; padding:4px 10px;">Switch &rarr;</button>'}
+      </div>
+    `;
+
+    if (!isCurrent) {
+      item.onclick = () => loginAsUser(u.id);
+    }
+    list.appendChild(item);
+  });
+
+  openModal('personaSwitchModal');
+}
 
 // ==========================================================================
 // TAB ROUTING & NAVIGATION
