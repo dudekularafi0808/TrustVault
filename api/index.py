@@ -18,7 +18,7 @@ if not os.environ.get("HOST_EMAIL"):
 if not os.environ.get("SMTP_SERVER"):
     os.environ["SMTP_SERVER"] = "smtp.gmail.com"
 if not os.environ.get("SMTP_PORT"):
-    os.environ["SMTP_PORT"] = "587"
+    os.environ["SMTP_PORT"] = "465"
 if not os.environ.get("SMTP_USERNAME"):
     os.environ["SMTP_USERNAME"] = "23jr1a0460@gmail.com"
 if not os.environ.get("SMTP_PASSWORD"):
@@ -26,7 +26,7 @@ if not os.environ.get("SMTP_PASSWORD"):
 if not os.environ.get("SMTP_SENDER"):
     os.environ["SMTP_SENDER"] = "TrustVault Security <23jr1a0460@gmail.com>"
 if not os.environ.get("SMTP_USE_TLS"):
-    os.environ["SMTP_USE_TLS"] = "true"
+    os.environ["SMTP_USE_TLS"] = "false"
 
 from app import app
 

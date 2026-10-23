@@ -19,15 +19,15 @@ def get_smtp_config():
     if hasattr(database, "_load_env_file"):
         database._load_env_file()
     server = os.environ.get("SMTP_SERVER", "").strip() or "smtp.gmail.com"
-    port_raw = os.environ.get("SMTP_PORT", "587").strip()
+    port_raw = os.environ.get("SMTP_PORT", "465").strip()
     try:
         port = int(port_raw)
     except ValueError:
-        port = 587
+        port = 465
     username = os.environ.get("SMTP_USERNAME", "").strip() or "23jr1a0460@gmail.com"
     password = os.environ.get("SMTP_PASSWORD", "").strip() or "dadgojkawkgvfyqk"
     sender = os.environ.get("SMTP_SENDER", "").strip() or f"TrustVault Security <{username}>"
-    use_tls = os.environ.get("SMTP_USE_TLS", "true").lower() in ("true", "1", "yes")
+    use_tls = os.environ.get("SMTP_USE_TLS", "false").lower() in ("true", "1", "yes")
     configured = bool(server and password)
     return {
         "configured": configured,
@@ -39,39 +39,65 @@ def get_smtp_config():
         "use_tls": use_tls
     }
 
-def send_email_notification(recipient, subject, text_content, html_content=None):
+def send_email_notification(recipient, subject, text_content, html_content=None, token=None):
     """
-    Delivers a real transactional security email via SMTP (e.g. Gmail, SendGrid, Outlook, SES).
-    Falls back gracefully if SMTP credentials are not configured in environment variables.
+    Delivers a real transactional security email via SMTP (Gmail SMTPS / STARTTLS).
+    Tries SSL Port 465 first for instantaneous cloud-serverless delivery.
+    Falls back to Port 587 if Port 465 encounters an error.
+    Permanently records the dispatch attempt in the database outbound_emails table.
     """
     cfg = get_smtp_config()
     if not cfg["configured"]:
-        return False, "SMTP not configured (SMTP_SERVER or SMTP_PASSWORD missing). Simulated delivery recorded."
+        return False, "SMTP not configured (credentials missing)"
 
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = cfg["sender"]
+    msg["To"] = recipient
+
+    msg.attach(MIMEText(text_content, "plain", "utf-8"))
+    if html_content:
+        msg.attach(MIMEText(html_content, "html", "utf-8"))
+
+    delivered = False
+    delivery_msg = ""
+
+    # Primary strategy: Direct SMTPS (Port 465 SSL) - vastly superior on AWS Lambda / Vercel
     try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = cfg["sender"]
-        msg["To"] = recipient
-
-        msg.attach(MIMEText(text_content, "plain", "utf-8"))
-        if html_content:
-            msg.attach(MIMEText(html_content, "html", "utf-8"))
-
-        if cfg["port"] == 465:
-            with smtplib.SMTP_SSL(cfg["server"], cfg["port"], timeout=10) as s:
+        with smtplib.SMTP_SSL(cfg["server"], 465, timeout=7) as s:
+            s.login(cfg["username"], cfg["password"])
+            s.send_message(msg)
+            delivered = True
+            delivery_msg = f"Email delivered successfully to {recipient} via {cfg['server']}:465 (SSL)"
+    except Exception as e_ssl:
+        # Secondary fallback: Port 587 (STARTTLS)
+        try:
+            with smtplib.SMTP(cfg["server"], 587, timeout=7) as s:
+                s.starttls()
                 s.login(cfg["username"], cfg["password"])
                 s.send_message(msg)
-        else:
-            with smtplib.SMTP(cfg["server"], cfg["port"], timeout=10) as s:
-                if cfg["use_tls"]:
-                    s.starttls()
-                s.login(cfg["username"], cfg["password"])
-                s.send_message(msg)
+                delivered = True
+                delivery_msg = f"Email delivered successfully to {recipient} via {cfg['server']}:587 (TLS)"
+        except Exception as e_tls:
+            delivery_msg = f"SMTP error: SSL 465 failed ({e_ssl}); TLS 587 failed ({e_tls})"
 
-        return True, f"Email delivered successfully to {recipient} via {cfg['server']}:{cfg['port']}"
-    except Exception as e:
-        return False, f"SMTP delivery error: {str(e)}"
+    # Record email dispatch in database
+    try:
+        conn = database.get_db()
+        cur = conn.cursor()
+        email_id = f"eml_{secrets.token_hex(12)}"
+        body_to_save = text_content[:500] if text_content else (subject or "")
+        now_ts = datetime.now(timezone.utc).isoformat()
+        cur.execute("""
+            INSERT INTO outbound_emails (id, recipient, subject, body, token, sent_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (email_id, recipient, f"[{'SENT' if delivered else 'FAILED'}] {subject}", body_to_save, token or "", now_ts))
+        conn.commit()
+        conn.close()
+    except Exception as db_err:
+        print(f"Warning: could not record email to database: {db_err}")
+
+    return delivered, delivery_msg
 
 app = Flask(__name__, static_folder="static", static_url_path="")
 app.secret_key = "TRUSTVAULT_SESSION_SECRET_KEY_v2026_SECURITY_GRADE"
@@ -356,8 +382,21 @@ def auth_signup():
         details={"email": email, "role": role, "host_notified": HOST_EMAIL}
     )
 
-    # Build approval and rejection URLs for the Host
-    base_url = request.host_url.rstrip("/")
+    # Build robust approval and rejection URLs for the Host
+    forwarded_proto = request.headers.get("X-Forwarded-Proto", "").lower()
+    forwarded_host = request.headers.get("X-Forwarded-Host", "").split(",")[0].strip()
+
+    if forwarded_host:
+        proto = forwarded_proto if forwarded_proto in ("http", "https") else "https"
+        base_url = f"{proto}://{forwarded_host}".rstrip("/")
+    else:
+        base_url = request.host_url.rstrip("/")
+
+    # Ensure HTTPS for cloud deployments (e.g. vercel.app or forwarded https)
+    if "vercel.app" in base_url or forwarded_proto == "https":
+        if base_url.startswith("http://"):
+            base_url = "https://" + base_url[7:]
+
     approve_url = f"{base_url}/api/auth/approve-signup?token={approval_token}"
     reject_url = f"{base_url}/api/auth/reject-signup?token={approval_token}"
 
@@ -442,12 +481,14 @@ Security Subsystem Note: Once approved, the user will be automatically granted 7
 </body>
 </html>"""
 
-    # Dispatch authorization request to HOST_EMAIL
-    host_sent, host_err = send_email_notification(HOST_EMAIL, host_subject, host_body, host_html)
+    # Dispatch authorization request to HOST_EMAIL FIRST and IMMEDIATELY
+    host_sent, host_err = send_email_notification(HOST_EMAIL, host_subject, host_body, host_html, token=approval_token)
 
-    # Dispatch confirmation notice to the registering user
-    user_subject = f"TrustVault Registration Received - Pending Host Authorization"
-    user_body = f"""Hello {full_name},
+    # Dispatch confirmation notice to the registering user asynchronously
+    def _dispatch_candidate_notice():
+        try:
+            cand_subject = "TrustVault Registration Received - Pending Host Authorization"
+            cand_body = f"""Hello {full_name},
 
 Thank you for registering on TrustVault as a {role_name}.
 
@@ -455,7 +496,14 @@ Your registration request has been submitted and forwarded directly to the Platf
 
 Once approved by the Host, you will receive an activation email with 7 days of full access, allowing you to log in anytime with your credentials ({username}).
 """
-    send_email_notification(email, user_subject, user_body)
+            send_email_notification(email, cand_subject, cand_body)
+        except Exception as _ce:
+            print(f"Warning: candidate notice error: {_ce}")
+
+    import threading
+    t = threading.Thread(target=_dispatch_candidate_notice)
+    t.daemon = True
+    t.start()
 
     return jsonify({
         "message": f"Registration submitted! Your request has been forwarded to the Host ({HOST_EMAIL}) for authorization. You will receive an email once approved.",
@@ -1318,6 +1366,51 @@ def approve_user_in_app():
     send_email_notification(target_user["email"], approved_subject, approved_body)
 
     return jsonify({"success": True, "message": f"User {target_user['username']} ({role_name}) approved successfully with 7-day access.", "permission_expires_at": permission_expires_at})
+
+@app.route("/api/auth/reject-user", methods=["POST"])
+def reject_user_in_app():
+    current_user = get_current_user()
+    if not current_user:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.get_json() or {}
+    user_id = data.get("user_id")
+    if not user_id:
+        return jsonify({"error": "Missing user_id"}), 400
+
+    HOST_EMAIL = os.environ.get("HOST_EMAIL", "23jr1a0460@gmail.com").strip().lower()
+    is_host = (current_user["email"].lower() == HOST_EMAIL)
+    if not is_host:
+        return jsonify({"error": "Only the Host (23jr1a0460@gmail.com) can decline registrations."}), 403
+
+    conn = database.get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    target_user = cursor.fetchone()
+
+    if not target_user:
+        conn.close()
+        return jsonify({"error": "User not found"}), 404
+
+    cursor.execute("UPDATE users SET status = 'rejected', approval_token = NULL WHERE id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+
+    database.record_audit_event(
+        actor_id=current_user["id"],
+        actor_name=current_user["full_name"],
+        actor_role=current_user["role"],
+        action="ACCOUNT_REJECTED",
+        target_type="USER",
+        target_id=target_user["id"],
+        target_name=target_user["username"],
+        status="ALLOWED",
+        ip_address=get_client_ip(),
+        user_agent=request.user_agent.string,
+        details={"rejected_by": current_user["full_name"], "user": target_user["username"], "email": target_user["email"]}
+    )
+
+    return jsonify({"success": True, "message": f"Registration for {target_user['username']} declined."})
 
 @app.route("/api/users", methods=["GET"])
 def list_users():
