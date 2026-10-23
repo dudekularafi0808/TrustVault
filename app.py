@@ -50,10 +50,14 @@ def send_email_notification(recipient, subject, text_content, html_content=None,
     if not cfg["configured"]:
         return False, "SMTP not configured (credentials missing)"
 
+    import email.utils
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = cfg["sender"]
     msg["To"] = recipient
+    msg["Date"] = email.utils.formatdate(localtime=True)
+    msg["Message-ID"] = email.utils.make_msgid(domain="gmail.com")
+    msg["Reply-To"] = cfg["username"]
 
     msg.attach(MIMEText(text_content, "plain", "utf-8"))
     if html_content:
@@ -400,103 +404,125 @@ def auth_signup():
     approve_url = f"{base_url}/api/auth/approve-signup?token={approval_token}"
     reject_url = f"{base_url}/api/auth/reject-signup?token={approval_token}"
 
-    host_subject = f"TrustVault Authorization Request: New {role_name} Registration ({full_name})"
-    host_body = f"""TRUSTVAULT ZERO-TRUST SECURITY - HOST AUTHORIZATION DISPATCH
-============================================================
-ATTENTION PLATFORM HOST ({HOST_EMAIL}):
-A new user registration requires your authorization on TrustVault:
+    # Approval required workflow (Oct 21-22 system):
+    # 1. Administrator: forwarded ONLY to the host 23jr1a0460@gmail.com
+    # 2. Document owner: forwarded to Administrators + HOST_EMAIL
+    # 3. Viewer: forwarded to Administrators and Document Owners + HOST_EMAIL
+    conn = database.get_db()
+    cursor = conn.cursor()
 
-CANDIDATE INFORMATION:
+    if role == "admin":
+        approver_emails = [HOST_EMAIL]
+        approver_label = "the Host (23jr1a0460@gmail.com)"
+    elif role == "owner":
+        cursor.execute("SELECT DISTINCT email FROM users WHERE role = 'admin' AND status = 'active'")
+        approver_emails = [r["email"] for r in cursor.fetchall() if r["email"]]
+        if HOST_EMAIL not in approver_emails:
+            approver_emails.append(HOST_EMAIL)
+        approver_label = "System Administrators"
+    else: # viewer
+        cursor.execute("SELECT DISTINCT email FROM users WHERE role IN ('admin', 'owner') AND status = 'active'")
+        approver_emails = [r["email"] for r in cursor.fetchall() if r["email"]]
+        if HOST_EMAIL not in approver_emails:
+            approver_emails.append(HOST_EMAIL)
+        approver_label = "Administrators and Document Owners"
+
+    conn.close()
+
+    approval_subject = f"TrustVault Authorization Request: New {role_name} Sign Up ({full_name})"
+    approval_body = f"""TRUSTVAULT ACCESS AUTHORIZATION REQUEST
+==================================================
+A new user has submitted registration requesting the role of {role_name.upper()}.
+
+Candidate Details:
 - Full Name: {full_name}
 - Username: {username}
-- Registered Email: {email}
-- Requested Role: {role_name} ({role.upper()})
-- Professional Title: {title}
-- Registration Time: {now} (UTC)
+- Email Address: {email}
+- Requested Role: {role_name}
+- Position / Title: {title}
+- Registration Time: {now}
+- Origin IP: {get_client_ip()}
 
 ACTION REQUIRED:
-To authorize this user with 7-Day Access Permission, click:
+To APPROVE this user and activate their {role_name} access, click:
 {approve_url}
 
-To decline this registration request, click:
+To REJECT this request, click:
 {reject_url}
-
-Security Subsystem Note: Once approved, the user will be automatically granted 7 days of full access.
 """
-    host_html = f"""<!DOCTYPE html>
+
+    approval_html = f"""<!DOCTYPE html>
 <html>
-<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; background-color:#f1f5f9; color:#0f172a; margin:0; padding:24px;">
-  <div style="max-width:580px; margin:0 auto; background:#ffffff; border:1px solid #cbd5e1; border-radius:12px; overflow:hidden; box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background-color:#eff6ff; color:#0f172a; padding:24px;">
+  <div style="max-width:560px; margin:0 auto; background:#ffffff; border:1px solid #bfdbfe; border-radius:12px; overflow:hidden;">
     <div style="background:#1e40af; color:#ffffff; padding:24px; text-align:center;">
-      <h1 style="margin:0; font-size:22px; font-weight:700; letter-spacing:0.5px;">TRUSTVAULT SECURITY</h1>
-      <p style="margin:6px 0 0; font-size:13px; color:#93c5fd;">Zero-Trust Identity Authorization Request</p>
+      <h1 style="margin:0; font-size:20px; font-weight:700;">TRUSTVAULT</h1>
+      <p style="margin:6px 0 0; font-size:13px; color:#bfdbfe;">Keep your File Safe and Secure</p>
     </div>
-    <div style="padding:28px 24px;">
-      <div style="background:#eff6ff; border-left:4px solid #3b82f6; padding:12px 16px; border-radius:4px; margin-bottom:20px;">
-        <p style="margin:0; font-size:14px; font-weight:600; color:#1e40af;">New User Registration Awaiting Your Authorization</p>
-        <p style="margin:4px 0 0; font-size:13px; color:#3b82f6;">Host Administrator Review &bull; 7-Day Permission Grant</p>
+    <div style="padding:28px;">
+      <h2 style="font-size:18px; margin-top:0; color:#1e40af;">New Access Authorization Request</h2>
+      <p style="font-size:14px; color:#334155;">A user has registered on TrustVault and requires approval to activate their account as <strong>{role_name}</strong>.</p>
+      
+      <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:16px; margin:20px 0;">
+        <table style="width:100%; font-size:13px; color:#334155; line-height:1.8;">
+          <tr><td><strong>Full Name:</strong></td><td>{full_name}</td></tr>
+          <tr><td><strong>Requested Role:</strong></td><td><span style="background:#eff6ff; border:1px solid #3b82f6; color:#1e40af; padding:2px 8px; border-radius:12px; font-weight:700;">{role_name}</span></td></tr>
+          <tr><td><strong>Username:</strong></td><td>{username}</td></tr>
+          <tr><td><strong>Email:</strong></td><td>{email}</td></tr>
+          <tr><td><strong>Title:</strong></td><td>{title}</td></tr>
+          <tr><td><strong>Timestamp:</strong></td><td>{now}</td></tr>
+        </table>
       </div>
 
-      <table style="width:100%; border-collapse:collapse; margin-bottom:24px; font-size:14px;">
-        <tr style="border-bottom:1px solid #e2e8f0;">
-          <td style="padding:10px 8px; color:#64748b; font-weight:600; width:38%;">Full Name</td>
-          <td style="padding:10px 8px; color:#0f172a; font-weight:700;">{full_name}</td>
-        </tr>
-        <tr style="border-bottom:1px solid #e2e8f0;">
-          <td style="padding:10px 8px; color:#64748b; font-weight:600;">Username</td>
-          <td style="padding:10px 8px; color:#0f172a; font-family:monospace; font-size:15px; font-weight:600;">{username}</td>
-        </tr>
-        <tr style="border-bottom:1px solid #e2e8f0;">
-          <td style="padding:10px 8px; color:#64748b; font-weight:600;">Candidate Email</td>
-          <td style="padding:10px 8px; color:#0f172a;"><a href="mailto:{email}" style="color:#2563eb; text-decoration:none;">{email}</a></td>
-        </tr>
-        <tr style="border-bottom:1px solid #e2e8f0;">
-          <td style="padding:10px 8px; color:#64748b; font-weight:600;">Requested Role</td>
-          <td style="padding:10px 8px;"><span style="display:inline-block; background:#dbeafe; color:#1e40af; padding:4px 10px; border-radius:12px; font-weight:700; font-size:12px;">{role_name}</span></td>
-        </tr>
-        <tr style="border-bottom:1px solid #e2e8f0;">
-          <td style="padding:10px 8px; color:#64748b; font-weight:600;">Title / Dept</td>
-          <td style="padding:10px 8px; color:#334155;">{title}</td>
-        </tr>
-        <tr>
-          <td style="padding:10px 8px; color:#64748b; font-weight:600;">Registration Time</td>
-          <td style="padding:10px 8px; color:#64748b; font-size:12px;">{now}</td>
-        </tr>
-      </table>
-
-      <div style="text-align:center; margin:32px 0 20px 0;">
-        <a href="{approve_url}" style="display:inline-block; background:#16a34a; color:#ffffff; font-weight:700; text-decoration:none; padding:14px 28px; border-radius:8px; font-size:15px; box-shadow:0 4px 6px -1px rgba(22,163,74,0.3); margin-right:12px; margin-bottom:10px;">
-          &#10004; Approve Access (7 Days)
-        </a>
-        <a href="{reject_url}" style="display:inline-block; background:#dc2626; color:#ffffff; font-weight:700; text-decoration:none; padding:14px 28px; border-radius:8px; font-size:15px; box-shadow:0 4px 6px -1px rgba(220,38,38,0.3); margin-bottom:10px;">
-          &#10006; Decline Request
-        </a>
+      <div style="margin-top:24px;">
+        <a href="{approve_url}" style="display:inline-block; background:#2563eb; color:#ffffff; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:700; font-size:14px;">Approve Registration</a>
+        <a href="{reject_url}" style="display:inline-block; background:#ffffff; color:#dc2626; border:1px solid #f87171; padding:12px 20px; border-radius:6px; text-decoration:none; font-weight:600; font-size:14px; margin-left:12px;">Decline</a>
       </div>
-      <p style="text-align:center; font-size:12px; color:#94a3b8; margin:0;">Clicking Approve activates the user for 7 days and delivers an activation email to their address.</p>
     </div>
-    <div style="background:#f8fafc; border-top:1px solid #e2e8f0; padding:14px; text-align:center; font-size:12px; color:#94a3b8;">
-      TrustVault Cryptographic Security Subsystem &bull; Host Authorization
+    <div style="background:#f8fafc; border-top:1px solid #e2e8f0; padding:14px; text-align:center; font-size:12px; color:#64748b;">
+      TrustVault Authorization Engine &bull; Automated Dispatch
     </div>
   </div>
 </body>
 </html>"""
 
-    # Dispatch authorization request to HOST_EMAIL FIRST and IMMEDIATELY
-    host_sent, host_err = send_email_notification(HOST_EMAIL, host_subject, host_body, host_html, token=approval_token)
+    # Dispatch to all approvers (Host is always included)
+    for recipient in approver_emails:
+        send_email_notification(recipient, approval_subject, approval_body, approval_html, token=approval_token)
 
-    # Dispatch confirmation notice to the registering user asynchronously
+    # Dispatch receipt confirmation to applicant
     def _dispatch_candidate_notice():
         try:
-            cand_subject = "TrustVault Registration Received - Pending Host Authorization"
-            cand_body = f"""Hello {full_name},
+            ack_subject = f"TrustVault Registration Received - Pending {role_name} Approval"
+            ack_body = f"""Hello {full_name},
 
-Thank you for registering on TrustVault as a {role_name}.
+Thank you for registering on TrustVault.
 
-Your registration request has been submitted and forwarded directly to the Platform Host ({HOST_EMAIL}) for authorization.
+Your request for the role of {role_name.upper()} has been received and forwarded to {approver_label} for authorization.
 
-Once approved by the Host, you will receive an activation email with 7 days of full access, allowing you to log in anytime with your credentials ({username}).
+Once approved, you will receive an email confirmation and will be able to log in with your username ({username}) and password.
 """
-            send_email_notification(email, cand_subject, cand_body)
+            ack_html = f"""<!DOCTYPE html>
+<html>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background-color:#eff6ff; color:#0f172a; padding:24px;">
+  <div style="max-width:540px; margin:0 auto; background:#ffffff; border:1px solid #bfdbfe; border-radius:12px; overflow:hidden;">
+    <div style="background:#1e40af; color:#ffffff; padding:24px; text-align:center;">
+      <h1 style="margin:0; font-size:20px; font-weight:700;">TRUSTVAULT</h1>
+      <p style="margin:6px 0 0; font-size:13px; color:#bfdbfe;">Keep your File Safe and Secure</p>
+    </div>
+    <div style="padding:28px;">
+      <h2 style="font-size:18px; margin-top:0; color:#1e40af;">Registration Received</h2>
+      <p style="font-size:14px; color:#334155;">Hello <strong>{full_name}</strong>,</p>
+      <p style="font-size:14px; color:#334155;">Your request to register as <strong>{role_name}</strong> has been submitted. For security compliance, this account requires authorization from <strong>{approver_label}</strong>.</p>
+      <div style="background:#eff6ff; border:1px solid #93c5fd; border-radius:8px; padding:14px; margin:16px 0; font-size:13px; color:#1e40af;">
+        Status: <strong>Pending Authorization</strong><br>
+        You will receive an email alert as soon as your account is approved.
+      </div>
+    </div>
+  </div>
+</body>
+</html>"""
+            send_email_notification(email, ack_subject, ack_body, ack_html)
         except Exception as _ce:
             print(f"Warning: candidate notice error: {_ce}")
 
@@ -506,9 +532,8 @@ Once approved by the Host, you will receive an activation email with 7 days of f
     t.start()
 
     return jsonify({
-        "message": f"Registration submitted! Your request has been forwarded to the Host ({HOST_EMAIL}) for authorization. You will receive an email once approved.",
+        "message": f"Registration submitted! Your request has been forwarded to {approver_label} for authorization. You will receive an email once approved.",
         "status": "pending_approval",
-        "email_sent_to_host": host_sent,
         "user": {
             "id": user_id,
             "username": username,
