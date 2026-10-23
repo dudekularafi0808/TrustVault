@@ -25,7 +25,7 @@ def _load_env_file():
 
 _load_env_file()
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "").strip() or "postgresql://postgres:Ece%400460___@db.lduepqknvpsfjycarevm.supabase.co:5432/postgres?sslmode=require"
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip() or "postgresql://postgres.lduepqknvpsfjycarevm:Ece%400460___@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres?sslmode=require"
 IS_POSTGRES = DATABASE_URL.startswith("postgresql://") or DATABASE_URL.startswith("postgres://")
 
 def _normalize_pg_url(url: str) -> str:
@@ -159,15 +159,18 @@ VAULT_HMAC_KEY = b"TRUSTVAULT_IMMUTABLE_AUDIT_SECRET_KEY_v2026_DEEPMIND"
 
 def _get_connection():
     if IS_POSTGRES:
-        normalized_url = _normalize_pg_url(DATABASE_URL)
-        raw_conn = psycopg2.connect(normalized_url)
-        return PostgresConnWrapper(raw_conn)
-    else:
-        conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys = ON;")
-        conn.execute("PRAGMA journal_mode = WAL;")
-        return conn
+        try:
+            normalized_url = _normalize_pg_url(DATABASE_URL)
+            raw_conn = psycopg2.connect(normalized_url, connect_timeout=5)
+            return PostgresConnWrapper(raw_conn)
+        except Exception as e:
+            print(f"PostgreSQL connection warning: {e}. Falling back to resilient local storage.")
+    
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON;")
+    conn.execute("PRAGMA journal_mode = WAL;")
+    return conn
 
 def get_db():
     if not IS_POSTGRES and not os.path.exists(DB_PATH):

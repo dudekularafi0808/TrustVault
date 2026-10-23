@@ -80,7 +80,7 @@ UPLOADS_DIR = database.UPLOADS_DIR
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 
 # Ensure database is initialized on serverless startup
-if not os.path.exists(database.DB_PATH):
+if not database.IS_POSTGRES and not os.path.exists(database.DB_PATH):
     database.init_db()
 
 # Allowed file extensions and corresponding magic bytes

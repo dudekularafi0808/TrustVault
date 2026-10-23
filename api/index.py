@@ -12,7 +12,7 @@ os.environ["VERCEL"] = "1"
 
 # Cloud fallbacks when .env is gitignored
 if not os.environ.get("DATABASE_URL"):
-    os.environ["DATABASE_URL"] = "postgresql://postgres:Ece%400460___@db.lduepqknvpsfjycarevm.supabase.co:5432/postgres?sslmode=require"
+    os.environ["DATABASE_URL"] = "postgresql://postgres.lduepqknvpsfjycarevm:Ece%400460___@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres?sslmode=require"
 if not os.environ.get("HOST_EMAIL"):
     os.environ["HOST_EMAIL"] = "23jr1a0460@gmail.com"
 if not os.environ.get("SMTP_SERVER"):
