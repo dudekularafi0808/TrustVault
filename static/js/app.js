@@ -33,7 +33,102 @@ async function checkAuth() {
   }
 }
 
+// =========================================================================
+// 10-MINUTE AUTOMATIC INACTIVITY LOGOUT SYSTEM (600,000 ms)
+// =========================================================================
+const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
+let inactivityIntervalId = null;
+let lastUserActivityTime = Date.now();
+let inactivityListenersAttached = false;
+
+function recordUserActivity() {
+  lastUserActivityTime = Date.now();
+  try {
+    localStorage.setItem('trustvault_last_activity', lastUserActivityTime.toString());
+  } catch (e) {}
+}
+
+let _lastThrottleMove = 0;
+function onUserActivityEvent(e) {
+  if (e && e.type === 'mousemove') {
+    const now = Date.now();
+    if (now - _lastThrottleMove < 1500) return;
+    _lastThrottleMove = now;
+  }
+  recordUserActivity();
+}
+
+function startInactivityTimer() {
+  recordUserActivity();
+  if (!inactivityListenersAttached) {
+    ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'].forEach(evt => {
+      window.addEventListener(evt, onUserActivityEvent, { passive: true });
+    });
+    inactivityListenersAttached = true;
+  }
+  if (inactivityIntervalId) clearInterval(inactivityIntervalId);
+  inactivityIntervalId = setInterval(checkInactivityTimeout, 2000);
+}
+
+function stopInactivityTimer() {
+  if (inactivityIntervalId) {
+    clearInterval(inactivityIntervalId);
+    inactivityIntervalId = null;
+  }
+}
+
+async function checkInactivityTimeout() {
+  if (!currentUser) {
+    stopInactivityTimer();
+    return;
+  }
+  const now = Date.now();
+  let effectiveLast = lastUserActivityTime;
+  try {
+    const stored = localStorage.getItem('trustvault_last_activity');
+    if (stored) {
+      const parsed = parseInt(stored, 10);
+      if (!isNaN(parsed) && parsed > effectiveLast) {
+        effectiveLast = parsed;
+        lastUserActivityTime = parsed;
+      }
+    }
+  } catch (e) {}
+
+  if (now - effectiveLast >= INACTIVITY_TIMEOUT_MS) {
+    await triggerInactivityLogout();
+  }
+}
+
+async function triggerInactivityLogout() {
+  stopInactivityTimer();
+  try {
+    localStorage.removeItem('trustvault_last_activity');
+  } catch (e) {}
+
+  try {
+    await fetch('/api/auth/logout', { method: 'POST' });
+  } catch (e) {}
+
+  currentUser = null;
+  const allModals = ['docDetailModal', 'uploadModal', 'shareLinkModal', 'personaSwitchModal', 'roleLoginModal', 'testModal', 'specModal', 'forgotPasswordModal'];
+  allModals.forEach(m => {
+    const el = document.getElementById(m);
+    if (el) el.style.display = 'none';
+  });
+
+  document.getElementById('dashboardView').style.display = 'none';
+  document.getElementById('loginView').style.display = 'flex';
+
+  if (typeof openSignUpModal === 'function') {
+    openSignUpModal('inactivity');
+  }
+}
+
+window.triggerInactivityTimeout = triggerInactivityLogout;
+
 function showLogin() {
+  stopInactivityTimer();
   currentUser = null;
   document.getElementById('loginView').style.display = 'flex';
   document.getElementById('dashboardView').style.display = 'none';
@@ -45,6 +140,7 @@ function showDashboard() {
   updateUserBadge();
   switchTab('documents');
   loadUsers();
+  startInactivityTimer();
 }
 
 async function loginAsRole(role) {
@@ -87,7 +183,9 @@ async function loginAsUser(userId) {
 }
 
 async function logout() {
+  stopInactivityTimer();
   try {
+    localStorage.removeItem('trustvault_last_activity');
     await fetch('/api/auth/logout', { method: 'POST' });
   } catch (err) {
     console.error('Logout error:', err);

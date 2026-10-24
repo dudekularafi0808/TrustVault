@@ -140,6 +140,23 @@ def get_current_user():
     user_id = session.get("user_id") or request.headers.get("X-User-Id")
     if not user_id:
         return None
+
+    # Enforce 10-minute inactivity timeout for session-authenticated users
+    if session.get("user_id"):
+        last_active_str = session.get("last_active")
+        now_dt = datetime.now(timezone.utc)
+        if last_active_str:
+            try:
+                last_active = datetime.fromisoformat(last_active_str)
+                if last_active.tzinfo is None:
+                    last_active = last_active.replace(tzinfo=timezone.utc)
+                if (now_dt - last_active).total_seconds() > 600:  # 10 minutes
+                    session.clear()
+                    return None
+            except Exception:
+                pass
+        session["last_active"] = now_dt.isoformat()
+
     conn = database.get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
@@ -322,6 +339,7 @@ def auth_signup():
         conn.close()
 
         session["user_id"] = user_id
+        session["last_active"] = datetime.now(timezone.utc).isoformat()
         session.permanent = True
 
         database.record_audit_event(
@@ -691,6 +709,7 @@ def auth_login():
         user_expires = new_exp
 
     session["user_id"] = user["id"]
+    session["last_active"] = datetime.now(timezone.utc).isoformat()
     session.permanent = True
 
     database.record_audit_event(
@@ -766,6 +785,7 @@ def renew_permission():
     conn.close()
 
     session["user_id"] = user["id"]
+    session["last_active"] = datetime.now(timezone.utc).isoformat()
     session.permanent = True
 
     database.record_audit_event(

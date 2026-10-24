@@ -1684,6 +1684,13 @@
           </div>
         </div>
 
+        <div style="text-align:center; margin: 18px 0 10px 0; font-size:0.86rem; color:var(--text-muted);">
+          New to TrustVault? 
+          <button type="button" class="btn-primary" onclick="openSignUpModal()" style="display:inline-flex; vertical-align:middle; margin-left:8px; font-size:0.82rem; padding:6px 14px; border-radius:6px; cursor:pointer;">
+            Create Identity / Sign Up
+          </button>
+        </div>
+
         <div class="login-security-guarantee">
           <span>Server-enforced on every byte</span>
           <span class="verified">SHA-256 Tamper-evident ledger</span>
@@ -1982,6 +1989,14 @@
         </div>
         <form id="signUpForm" onsubmit="handleSignUpSubmit(event)">
           <div class="modal-body">
+            <div id="signUpInactivityAlert" style="display:none; background:#fffbeb; border:1.5px solid #f59e0b; border-radius:8px; padding:12px 14px; margin-bottom:14px; align-items:center; gap:10px;">
+              <span style="font-size:1.4rem;">⏱️</span>
+              <div style="font-size:0.83rem; color:#92400e; line-height:1.4;">
+                <strong>Automatic Security Logout:</strong> You were automatically logged out due to 10 minutes of inactivity.<br>
+                Register a new user below, or <a href="javascript:void(0)" onclick="closeModal('signUpModal'); openRoleLoginModal('viewer');" style="color:#2563eb; font-weight:700; text-decoration:underline;">click here to sign in to an existing role</a>.
+              </div>
+            </div>
+
             <div id="signUpError" class="auth-error-banner" style="display:none;"></div>
 
             <div class="form-group">
@@ -2379,7 +2394,101 @@
       showLogin();
     }
 
+    // =========================================================================
+    // 10-MINUTE AUTOMATIC INACTIVITY LOGOUT SYSTEM (600,000 ms)
+    // =========================================================================
+    const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+    let inactivityIntervalId = null;
+    let lastUserActivityTime = Date.now();
+    let inactivityListenersAttached = false;
+
+    function recordUserActivity() {
+      lastUserActivityTime = Date.now();
+      try {
+        localStorage.setItem('trustvault_last_activity', lastUserActivityTime.toString());
+      } catch (e) {}
+    }
+
+    let _lastThrottleMove = 0;
+    function onUserActivityEvent(e) {
+      if (e && e.type === 'mousemove') {
+        const now = Date.now();
+        if (now - _lastThrottleMove < 1500) return;
+        _lastThrottleMove = now;
+      }
+      recordUserActivity();
+    }
+
+    function startInactivityTimer() {
+      recordUserActivity();
+      if (!inactivityListenersAttached) {
+        ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'].forEach(evt => {
+          window.addEventListener(evt, onUserActivityEvent, { passive: true });
+        });
+        inactivityListenersAttached = true;
+      }
+      if (inactivityIntervalId) clearInterval(inactivityIntervalId);
+      inactivityIntervalId = setInterval(checkInactivityTimeout, 2000);
+    }
+
+    function stopInactivityTimer() {
+      if (inactivityIntervalId) {
+        clearInterval(inactivityIntervalId);
+        inactivityIntervalId = null;
+      }
+    }
+
+    async function checkInactivityTimeout() {
+      if (!currentUser) {
+        stopInactivityTimer();
+        return;
+      }
+      const now = Date.now();
+      let effectiveLast = lastUserActivityTime;
+      try {
+        const stored = localStorage.getItem('trustvault_last_activity');
+        if (stored) {
+          const parsed = parseInt(stored, 10);
+          if (!isNaN(parsed) && parsed > effectiveLast) {
+            effectiveLast = parsed;
+            lastUserActivityTime = parsed;
+          }
+        }
+      } catch (e) {}
+
+      if (now - effectiveLast >= INACTIVITY_TIMEOUT_MS) {
+        await triggerInactivityLogout();
+      }
+    }
+
+    async function triggerInactivityLogout() {
+      stopInactivityTimer();
+      try {
+        localStorage.removeItem('trustvault_last_activity');
+      } catch (e) {}
+
+      try {
+        await fetch('/api/auth/logout', { method: 'POST' });
+      } catch (e) {}
+
+      currentUser = null;
+
+      // Close all workspace modals
+      const allModals = ['docDetailModal', 'uploadModal', 'shareLinkModal', 'personaSwitchModal', 'roleLoginModal', 'testModal', 'specModal', 'forgotPasswordModal'];
+      allModals.forEach(m => closeModal(m));
+
+      document.getElementById('dashboardView').style.display = 'none';
+      document.getElementById('loginView').style.display = 'flex';
+
+      // Open the sign-up page as requested
+      openSignUpModal('inactivity');
+    }
+
+    // Expose for testing/verification
+    window.triggerInactivityTimeout = triggerInactivityLogout;
+
     function showLogin() {
+      stopInactivityTimer();
       currentUser = null;
       document.getElementById('loginView').style.display = 'flex';
       document.getElementById('dashboardView').style.display = 'none';
@@ -2391,6 +2500,7 @@
       updateUserBadge();
       switchTab('documents');
       loadUsers();
+      startInactivityTimer();
     }
 
     const EYE_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
@@ -2516,7 +2626,11 @@
       }
     }
 
-    function openSignUpModal() {
+    function openSignUpModal(reason) {
+      const alertEl = document.getElementById('signUpInactivityAlert');
+      if (alertEl) {
+        alertEl.style.display = (reason === 'inactivity') ? 'flex' : 'none';
+      }
       const errBox = document.getElementById('signUpError');
       if (errBox) errBox.style.display = 'none';
       document.getElementById('signUpForm').reset();
@@ -2809,7 +2923,9 @@
     }
 
     async function logout() {
+      stopInactivityTimer();
       try {
+        localStorage.removeItem('trustvault_last_activity');
         await fetch('/api/auth/logout', { method: 'POST' });
       } catch (err) {}
       showLogin();
