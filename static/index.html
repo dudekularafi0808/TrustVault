@@ -2249,7 +2249,8 @@
             </table>
           </div>
         </div>
-        <div class="modal-footer">
+        <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center;">
+          <button type="button" class="btn-danger" id="detailDeleteDocBtn" onclick="deleteCurrentActiveDoc()" style="display:none; font-size:0.82rem; padding:6px 14px;">🗑 Delete Document</button>
           <button type="button" class="btn-secondary" onclick="closeModal('docDetailModal')">Close</button>
         </div>
       </div>
@@ -3154,6 +3155,8 @@
         const card = document.createElement('div');
         card.className = 'doc-card';
         const isOwner = (currentUser && doc.owner_id === currentUser.id);
+        const isAdmin = (currentUser && currentUser.role === 'admin');
+        const canDelete = (isOwner || isAdmin);
         const accessLevel = doc.user_access_level || 'read';
 
         card.innerHTML = `
@@ -3179,7 +3182,7 @@
           <div class="doc-card-actions">
             <button class="btn-secondary" onclick="openDocDetail('${doc.id}')">Inspect</button>
             <button class="btn-primary" onclick="downloadDoc('${doc.id}')"><span>⬇️</span> Download</button>
-            ${isOwner ? `<button class="btn-danger" style="flex:0 0 36px; padding:8px;" onclick="deleteDoc('${doc.id}')" title="Delete">Delete</button>` : ''}
+            ${canDelete ? `<button class="btn-danger" style="flex:0 0 36px; padding:8px;" onclick="deleteDoc('${doc.id}')" title="Delete">Delete</button>` : ''}
           </div>
         `;
         grid.appendChild(card);
@@ -3226,6 +3229,11 @@
       const isOwner = (currentUser && doc.owner_id === currentUser.id);
       const isAdmin = (currentUser && currentUser.role === 'admin');
       const canManage = (isOwner || isAdmin);
+
+      const deleteBtn = document.getElementById('detailDeleteDocBtn');
+      if (deleteBtn) {
+        deleteBtn.style.display = canManage ? 'inline-block' : 'none';
+      }
 
       if (canManage) {
         permSection.style.display = 'block';
@@ -3340,10 +3348,6 @@
     }
 
     function downloadDoc(docId) {
-      if (currentUser && currentUser.role === 'admin' && docId === 'doc_hr_salary') {
-        alert("Access Refused: Zero-Trust Separation of Duties enforces that Administrators cannot view ungranted confidential file payloads.");
-        return;
-      }
       window.open(`/api/documents/${docId}/download`, '_blank');
     }
 
@@ -3368,6 +3372,13 @@
         localStore.docs = localStore.docs.filter(d => d.id !== docId);
         loadDocuments();
       }
+    }
+
+    async function deleteCurrentActiveDoc() {
+      if (!currentActiveDoc) return;
+      if (!confirm(`Are you sure you want to permanently delete "${currentActiveDoc.title}"?`)) return;
+      closeModal('docDetailModal');
+      await deleteDoc(currentActiveDoc.id);
     }
 
     function openUploadModal() {

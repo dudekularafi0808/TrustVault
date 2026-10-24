@@ -390,6 +390,7 @@ def init_db(reset=False):
                 owner_name VARCHAR(255) NOT NULL,
                 created_at VARCHAR(100) NOT NULL,
                 updated_at VARCHAR(100) NOT NULL,
+                file_data TEXT,
                 is_deleted INTEGER DEFAULT 0
             );
 
@@ -506,6 +507,7 @@ def init_db(reset=False):
             owner_name TEXT NOT NULL,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
+            file_data TEXT,
             is_deleted INTEGER DEFAULT 0
         );
 
