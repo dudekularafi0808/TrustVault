@@ -387,19 +387,23 @@ def auth_signup():
     )
 
     # Build robust approval and rejection URLs for the Host
-    forwarded_proto = request.headers.get("X-Forwarded-Proto", "").lower()
-    forwarded_host = request.headers.get("X-Forwarded-Host", "").split(",")[0].strip()
-
-    if forwarded_host:
-        proto = forwarded_proto if forwarded_proto in ("http", "https") else "https"
-        base_url = f"{proto}://{forwarded_host}".rstrip("/")
+    public_url = os.environ.get("PUBLIC_URL", "").strip().rstrip("/")
+    if public_url:
+        base_url = public_url
     else:
-        base_url = request.host_url.rstrip("/")
+        forwarded_proto = request.headers.get("X-Forwarded-Proto", "").lower()
+        forwarded_host = request.headers.get("X-Forwarded-Host", "").split(",")[0].strip()
 
-    # Ensure HTTPS for cloud deployments (e.g. vercel.app or forwarded https)
-    if "vercel.app" in base_url or forwarded_proto == "https":
-        if base_url.startswith("http://"):
-            base_url = "https://" + base_url[7:]
+        if forwarded_host:
+            proto = forwarded_proto if forwarded_proto in ("http", "https") else "https"
+            base_url = f"{proto}://{forwarded_host}".rstrip("/")
+        else:
+            base_url = request.host_url.rstrip("/")
+
+        # Ensure HTTPS for cloud deployments (e.g. vercel.app or forwarded https)
+        if "vercel.app" in base_url or forwarded_proto == "https":
+            if base_url.startswith("http://"):
+                base_url = "https://" + base_url[7:]
 
     approve_url = f"{base_url}/api/auth/approve-signup?token={approval_token}"
     reject_url = f"{base_url}/api/auth/reject-signup?token={approval_token}"
@@ -2504,5 +2508,5 @@ def run_live_tests():
 
 if __name__ == "__main__":
     database.init_db(reset=False)
-    print("TrustVault server launching on http://127.0.0.1:5000")
-    app.run(host="127.0.0.1", port=5000, debug=False)
+    print("TrustVault server launching on http://0.0.0.0:5000 (Local: http://localhost:5000, Network: http://10.106.102.213:5000)")
+    app.run(host="0.0.0.0", port=5000, debug=False)
