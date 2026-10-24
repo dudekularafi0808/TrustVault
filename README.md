@@ -25,7 +25,7 @@ Everyone have to renovate the registration every 7 days for security purpose.
 ---
 
 
-## 📁 Project Structure
+##  Project Structure
 
 ```
 trustvault/
@@ -42,20 +42,6 @@ trustvault/
 ```
 
 ---
-
-## 🚀 Running the Platform
-
-1. **Install Dependencies:**
-   ```powershell
-   pip install -r requirements.txt
-   ```
-
-2. **Start the Web Server:**
-   ```powershell
-   python app.py
-   ```
-   Open **[http://127.0.0.1:5000](http://127.0.0.1:5000)** in your browser.
-
 3. **Run the Automated Security Test Suite:**
    ```powershell
    python test_security.py
