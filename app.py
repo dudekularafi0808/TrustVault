@@ -24,8 +24,8 @@ def get_smtp_config():
         port = int(port_raw)
     except ValueError:
         port = 465
-    username = os.environ.get("SMTP_USERNAME", "").strip() or "23jr1a0460@gmail.com"
-    password = os.environ.get("SMTP_PASSWORD", "").strip() or "dadgojkawkgvfyqk"
+    username = os.environ.get("SMTP_USERNAME", "").strip() or "dudekularafi759@gmail.com"
+    password = os.environ.get("SMTP_PASSWORD", "").strip() or "muaqttpqiidemcst"
     sender = os.environ.get("SMTP_SENDER", "").strip() or f"TrustVault Security <{username}>"
     use_tls = os.environ.get("SMTP_USE_TLS", "false").lower() in ("true", "1", "yes")
     configured = bool(server and password)
@@ -296,7 +296,7 @@ def auth_signup():
         field = "Username" if existing["username"].lower() == username else "Email"
         return jsonify({"error": f"{field} is already registered. Please log in or use another {field.lower()}."}), 409
 
-    HOST_EMAIL = os.environ.get("HOST_EMAIL", "23jr1a0460@gmail.com").strip().lower()
+    HOST_EMAIL = os.environ.get("HOST_EMAIL", "dudekularafi759@gmail.com").strip().lower()
     is_host = (email == HOST_EMAIL)
 
     user_id = f"usr_{role}_{uuid.uuid4().hex[:8]}"
@@ -358,7 +358,7 @@ def auth_signup():
             }
         }), 201
 
-    # Non-host users: status = 'pending_approval' and approval request email dispatched to HOST_EMAIL (23jr1a0460@gmail.com)
+    # Non-host users: status = 'pending_approval' and approval request email dispatched to HOST_EMAIL (dudekularafi759@gmail.com)
     status = "pending_approval"
     approval_token = f"appr_{secrets.token_hex(20)}"
     approved_by = None
@@ -405,7 +405,7 @@ def auth_signup():
     reject_url = f"{base_url}/api/auth/reject-signup?token={approval_token}"
 
     # Approval required workflow (Oct 21-22 system):
-    # 1. Administrator: forwarded ONLY to the host 23jr1a0460@gmail.com
+    # 1. Administrator: forwarded ONLY to the host dudekularafi759@gmail.com
     # 2. Document owner: forwarded to Administrators + HOST_EMAIL
     # 3. Viewer: forwarded to Administrators and Document Owners + HOST_EMAIL
     conn = database.get_db()
@@ -413,7 +413,7 @@ def auth_signup():
 
     if role == "admin":
         approver_emails = [HOST_EMAIL]
-        approver_label = "the Host (23jr1a0460@gmail.com)"
+        approver_label = "the Host (dudekularafi759@gmail.com)"
     elif role == "owner":
         cursor.execute("SELECT DISTINCT email FROM users WHERE role = 'admin' AND status = 'active'")
         approver_emails = [r["email"] for r in cursor.fetchall() if r["email"]]
@@ -632,7 +632,7 @@ def auth_login():
 
     if user_status == "pending_approval":
         return jsonify({
-            "error": "Account Pending Approval: Approval is granted ONLY after the Host (23jr1a0460@gmail.com) clicks 'Approve access 7 days'. Please wait until the Host authorizes your request."
+            "error": "Account Pending Approval: Approval is granted ONLY after the Host (dudekularafi759@gmail.com) clicks 'Approve access 7 days'. Please wait until the Host authorizes your request."
         }), 403
 
     if user_status != "active":
@@ -1319,7 +1319,7 @@ def get_pending_approvals():
     if not current_user:
         return jsonify({"error": "Unauthorized"}), 401
 
-    HOST_EMAIL = os.environ.get("HOST_EMAIL", "23jr1a0460@gmail.com").strip().lower()
+    HOST_EMAIL = os.environ.get("HOST_EMAIL", "dudekularafi759@gmail.com").strip().lower()
     is_host = (current_user["email"].lower() == HOST_EMAIL)
 
     conn = database.get_db()
@@ -1345,10 +1345,10 @@ def approve_user_in_app():
     if not user_id:
         return jsonify({"error": "Missing user_id"}), 400
 
-    HOST_EMAIL = os.environ.get("HOST_EMAIL", "23jr1a0460@gmail.com").strip().lower()
+    HOST_EMAIL = os.environ.get("HOST_EMAIL", "dudekularafi759@gmail.com").strip().lower()
     is_host = (current_user["email"].lower() == HOST_EMAIL)
     if not is_host:
-        return jsonify({"error": "Only the Host (23jr1a0460@gmail.com) can authorize registrations."}), 403
+        return jsonify({"error": "Only the Host (dudekularafi759@gmail.com) can authorize registrations."}), 403
 
     conn = database.get_db()
     cursor = conn.cursor()
@@ -1403,10 +1403,10 @@ def reject_user_in_app():
     if not user_id:
         return jsonify({"error": "Missing user_id"}), 400
 
-    HOST_EMAIL = os.environ.get("HOST_EMAIL", "23jr1a0460@gmail.com").strip().lower()
+    HOST_EMAIL = os.environ.get("HOST_EMAIL", "dudekularafi759@gmail.com").strip().lower()
     is_host = (current_user["email"].lower() == HOST_EMAIL)
     if not is_host:
-        return jsonify({"error": "Only the Host (23jr1a0460@gmail.com) can decline registrations."}), 403
+        return jsonify({"error": "Only the Host (dudekularafi759@gmail.com) can decline registrations."}), 403
 
     conn = database.get_db()
     cursor = conn.cursor()

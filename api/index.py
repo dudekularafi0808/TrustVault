@@ -14,17 +14,17 @@ os.environ["VERCEL"] = "1"
 if not os.environ.get("DATABASE_URL"):
     os.environ["DATABASE_URL"] = "postgresql://postgres.lduepqknvpsfjycarevm:Ece%400460___@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres?sslmode=require"
 if not os.environ.get("HOST_EMAIL"):
-    os.environ["HOST_EMAIL"] = "23jr1a0460@gmail.com"
+    os.environ["HOST_EMAIL"] = "dudekularafi759@gmail.com"
 if not os.environ.get("SMTP_SERVER"):
     os.environ["SMTP_SERVER"] = "smtp.gmail.com"
 if not os.environ.get("SMTP_PORT"):
     os.environ["SMTP_PORT"] = "465"
 if not os.environ.get("SMTP_USERNAME"):
-    os.environ["SMTP_USERNAME"] = "23jr1a0460@gmail.com"
+    os.environ["SMTP_USERNAME"] = "dudekularafi759@gmail.com"
 if not os.environ.get("SMTP_PASSWORD"):
-    os.environ["SMTP_PASSWORD"] = "dadgojkawkgvfyqk"
+    os.environ["SMTP_PASSWORD"] = "muaqttpqiidemcst"
 if not os.environ.get("SMTP_SENDER"):
-    os.environ["SMTP_SENDER"] = "TrustVault Security <23jr1a0460@gmail.com>"
+    os.environ["SMTP_SENDER"] = "TrustVault Security <dudekularafi759@gmail.com>"
 if not os.environ.get("SMTP_USE_TLS"):
     os.environ["SMTP_USE_TLS"] = "false"
 

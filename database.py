@@ -452,7 +452,7 @@ def init_db(reset=False):
         conn.commit()
 
         # Ensure Host user exists with active admin role
-        host_email = os.environ.get("HOST_EMAIL", "23jr1a0460@gmail.com").strip().lower()
+        host_email = os.environ.get("HOST_EMAIL", "dudekularafi759@gmail.com").strip().lower()
         cursor.execute("SELECT id FROM users WHERE LOWER(email) = ?", (host_email,))
         if not cursor.fetchone():
             now_str = datetime.now(timezone.utc).isoformat()
@@ -580,7 +580,7 @@ def init_db(reset=False):
         cursor.execute("ALTER TABLE users ADD COLUMN permission_expires_at TEXT")
 
     # Ensure Host user exists with active admin role
-    host_email = os.environ.get("HOST_EMAIL", "23jr1a0460@gmail.com").strip().lower()
+    host_email = os.environ.get("HOST_EMAIL", "dudekularafi759@gmail.com").strip().lower()
     cursor.execute("SELECT id FROM users WHERE LOWER(email) = ?", (host_email,))
     if not cursor.fetchone():
         now_str = datetime.now(timezone.utc).isoformat()

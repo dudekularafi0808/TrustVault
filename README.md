@@ -17,7 +17,7 @@ TrustVault is a zero-compromise confidential document security platform where un
   - **Document owner**
   - **Viewer**
 - **Authentication & Multi-Tier Role Approvals:**
-  - **Administrator Signup:** Forwarded to the Host (`23jr1a0460@gmail.com`) for approval. Only host authorization activates the account.
+  - **Administrator Signup:** Forwarded to the Host (`dudekularafi759@gmail.com`) for approval. Only host authorization activates the account.
   - **Document owner Signup:** Forwarded to System Administrators for approval. Any administrator approval activates the account.
   - **Viewer Signup:** Forwarded to Administrators and Document Owners. Any administrator or document owner approval activates the account.
   - Mandatory username & password login, user registration ("Sign Up" button on top-right), and email-based password reset verification codes.
