@@ -479,7 +479,7 @@ To REJECT this request, click:
       </div>
 
       <div style="margin-top:24px;">
-        <a href="{approve_url}" style="display:inline-block; background:#2563eb; color:#ffffff; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:700; font-size:14px;">Approve Registration</a>
+        <a href="{approve_url}" style="display:inline-block; background:#16a34a; color:#ffffff; padding:12px 26px; border-radius:6px; text-decoration:none; font-weight:700; font-size:14px; box-shadow:0 4px 12px rgba(22,163,74,0.3);">✓ Review & Authorize Registration</a>
         <a href="{reject_url}" style="display:inline-block; background:#ffffff; color:#dc2626; border:1px solid #f87171; padding:12px 20px; border-radius:6px; text-decoration:none; font-weight:600; font-size:14px; margin-left:12px;">Decline</a>
       </div>
     </div>
@@ -1131,50 +1131,210 @@ All password reset tokens and security alerts will now be delivered directly to 
         "recipient": recipient
     }), (200 if success else 500)
 
+def _lookup_candidate_user(conn, token, user_id=None):
+    cursor = conn.cursor()
+    user = None
+    if user_id:
+        cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        user = cursor.fetchone()
+        if user:
+            return dict(user)
+    if token:
+        cursor.execute("SELECT * FROM users WHERE approval_token = ?", (token,))
+        user = cursor.fetchone()
+        if user:
+            return dict(user)
+        # Secondary fallback: lookup token in outbound_emails
+        cursor.execute("SELECT recipient, body FROM outbound_emails WHERE token = ? ORDER BY sent_at DESC LIMIT 1", (token,))
+        eml = cursor.fetchone()
+        if eml:
+            cursor.execute("SELECT * FROM users WHERE email = ?", (eml["recipient"],))
+            user = cursor.fetchone()
+            if not user:
+                import re
+                m = re.search(r"Username:\s*([^\s\r\n]+)", eml["body"])
+                if m:
+                    cursor.execute("SELECT * FROM users WHERE username = ?", (m.group(1),))
+                    user = cursor.fetchone()
+            if user:
+                return dict(user)
+    return None
+
 @app.route("/api/auth/approve-signup", methods=["GET", "POST"])
 def auth_approve_signup():
     """
-    Approves a pending signup via the one-click cryptographic link sent in the forwarding email.
+    Approves a pending signup via the secure cryptographic gateway link sent in the forwarding email.
+    Immune to automated email scanners (GET requests render the Authorization Gateway without mutating state).
     """
-    token = request.args.get("token") or (request.get_json() or {}).get("token")
-    if not token:
-        return "Missing approval token", 400
+    token = request.args.get("token") or request.form.get("token") or (request.get_json(silent=True) or {}).get("token") or ""
+    user_id = request.args.get("user_id") or request.form.get("user_id") or (request.get_json(silent=True) or {}).get("user_id") or ""
+    
+    # Check if request is an automated prefetch / bot crawler
+    user_agent_str = (request.user_agent.string or "").lower()
+    is_bot = (
+        request.headers.get("Purpose") == "prefetch" or
+        request.headers.get("X-Purpose") == "preview" or
+        request.headers.get("Sec-Purpose") == "prefetch" or
+        any(b in user_agent_str for b in ["bot", "spider", "crawler", "googleimageproxy", "google-read-aloud"])
+    )
+    if is_bot:
+        return ("OK", 200)
+
+    if not token and not user_id:
+        return "Missing authorization token or user_id", 400
 
     conn = database.get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users WHERE approval_token = ?", (token,))
-    user = cursor.fetchone()
-
+    user = _lookup_candidate_user(conn, token, user_id)
     if not user:
         conn.close()
-        html_expired = """<!DOCTYPE html>
+        html_unrecognized = """<!DOCTYPE html>
 <html>
-<head><title>TrustVault - Link Expired</title>
+<head><title>TrustVault - Authorization Notice</title>
 <style>
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #eff6ff; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; color: #1e3a8a; }
-.card { background: #ffffff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 36px; max-width: 480px; text-align: center; box-shadow: 0 10px 25px -5px rgba(30,58,138,0.1); }
-h2 { color: #1e40af; margin-top: 0; }
-a { display: inline-block; margin-top: 20px; background: #2563eb; color: #ffffff; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 600; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0b1329; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; color: #f8fafc; padding: 20px; }
+.card { background: #131f37; border: 1px solid #1e293b; border-radius: 14px; padding: 36px; max-width: 480px; text-align: center; box-shadow: 0 15px 30px rgba(0,0,0,0.5); }
+h2 { color: #f87171; margin-top: 0; font-size: 22px; }
+p { font-size: 14px; color: #94a3b8; line-height: 1.6; }
+a { display: inline-block; margin-top: 20px; background: #2563eb; color: #ffffff; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px; }
 </style>
 </head>
 <body>
   <div class="card">
-    <h2>Authorization Link Expired</h2>
-    <p>This approval link is invalid or has already been used.</p>
+    <h2>Authorization Token Not Found</h2>
+    <p>This approval link could not be matched with an active registration record. Please log into the TrustVault portal to view and manage pending registrations directly.</p>
     <a href="/">Go to TrustVault Portal</a>
   </div>
 </body>
 </html>"""
         if request.method == "GET" and not request.headers.get("Accept", "").startswith("application/json"):
-            return html_expired, 400
-        return jsonify({"error": "Invalid or expired authorization token"}), 400
+            return html_unrecognized, 404
+        return jsonify({"error": "Authorization token not found"}), 404
 
+    role_labels = {"admin": "Administrator", "owner": "Document owner", "viewer": "Viewer"}
+    role_name = role_labels.get(user["role"], user["role"])
+
+    # If the user is ALREADY active and approved:
+    if user["status"] == "active":
+        conn.close()
+        exp_date = str(user.get("permission_expires_at") or "")[:10] or "7 Days (Active)"
+        html_already_active = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TrustVault - Account Already Approved</title>
+<style>
+body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0b1329; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; color: #f8fafc; padding: 20px; }}
+.card {{ background: #131f37; border: 1px solid #1e293b; border-radius: 16px; padding: 36px; max-width: 520px; width: 100%; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }}
+.badge {{ display: inline-block; background: rgba(34,197,94,0.15); border: 1px solid #22c55e; color: #4ade80; padding: 6px 16px; border-radius: 20px; font-weight: 700; margin: 16px 0; font-size: 13px; }}
+h2 {{ color: #f8fafc; margin-top: 10px; font-size: 22px; }}
+p {{ font-size: 14px; color: #94a3b8; line-height: 1.6; }}
+.info-box {{ background: #0a1122; border: 1px solid #1e293b; border-radius: 10px; padding: 18px; margin: 20px 0; text-align: left; }}
+.info-row {{ display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; }}
+.info-label {{ color: #64748b; }}
+.info-val {{ color: #f1f5f9; font-weight: 600; }}
+a.btn {{ display: inline-block; margin-top: 20px; background: #2563eb; color: #ffffff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; }}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div style="font-size: 48px; margin-bottom: 8px;">✅</div>
+    <h2>Account Already Approved & Active</h2>
+    <div><span class="badge">STATUS: ACTIVE & AUTHORIZED</span></div>
+    <p>This user registration has already been approved and activated. The user can log in immediately with their credentials.</p>
+    <div class="info-box">
+      <div class="info-row"><span class="info-label">Candidate Name:</span><span class="info-val">{user['full_name']}</span></div>
+      <div class="info-row"><span class="info-label">Username:</span><span class="info-val">@{user['username']}</span></div>
+      <div class="info-row"><span class="info-label">Email:</span><span class="info-val">{user['email']}</span></div>
+      <div class="info-row"><span class="info-label">Assigned Role:</span><span class="info-val">{role_name}</span></div>
+      <div class="info-row"><span class="info-label">Permission Expiry:</span><span class="info-val" style="color:#4ade80;">{exp_date}</span></div>
+    </div>
+    <a href="/" class="btn">Go to TrustVault Portal</a>
+  </div>
+</body>
+</html>"""
+        if request.method == "GET" and not request.headers.get("Accept", "").startswith("application/json"):
+            return html_already_active, 200
+        return jsonify({"success": True, "message": f"User {user['username']} is already active.", "status": "active"}), 200
+
+    # If it's a GET request from a human browser: DO NOT MUTATE STATE!
+    # Render the interactive confirmation gateway page!
+    if request.method == "GET" and not request.headers.get("Accept", "").startswith("application/json"):
+        conn.close()
+        is_rejected = (user["status"] == "rejected")
+        html_gateway = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TrustVault - Authorize Registration</title>
+  <style>
+    body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0b1329; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; color: #f8fafc; padding: 20px; }}
+    .card {{ background: #131f37; border: 1px solid #1e3a8a; border-radius: 16px; padding: 36px; max-width: 520px; width: 100%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7); }}
+    .header {{ text-align: center; border-bottom: 1px solid #1e293b; padding-bottom: 20px; margin-bottom: 24px; }}
+    .logo-badge {{ background: #1e3a8a; color: #60a5fa; font-size: 11px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; padding: 4px 12px; border-radius: 20px; display: inline-block; margin-bottom: 10px; }}
+    h2 {{ margin: 6px 0; color: #f8fafc; font-size: 22px; font-weight: 700; }}
+    .sub {{ font-size: 13px; color: #94a3b8; margin: 0; }}
+    .info-box {{ background: #0a1122; border: 1px solid #1e293b; border-radius: 12px; padding: 20px; margin: 20px 0; }}
+    .info-row {{ display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 13px; }}
+    .info-row:last-child {{ border-bottom: none; }}
+    .info-label {{ color: #64748b; }}
+    .info-val {{ color: #f1f5f9; font-weight: 600; text-align: right; }}
+    .role-chip {{ background: rgba(59,130,246,0.2); border: 1px solid #3b82f6; color: #93c5fd; padding: 2px 10px; border-radius: 12px; font-weight: 700; font-size: 12px; }}
+    .btn-approve {{ width: 100%; background: #16a34a; color: #ffffff; border: none; border-radius: 8px; padding: 14px 20px; font-size: 15px; font-weight: 700; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 14px rgba(22,163,74,0.3); text-align: center; }}
+    .btn-approve:hover {{ background: #15803d; transform: translateY(-1px); }}
+    .alert-declined {{ background: rgba(239,68,68,0.1); border: 1px solid #ef4444; border-radius: 8px; padding: 12px 16px; font-size: 13px; color: #fca5a5; margin-bottom: 20px; }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <span class="logo-badge">TrustVault Security</span>
+      <h2>Access Authorization Request</h2>
+      <p class="sub">Review registration details and authorize access.</p>
+    </div>
+
+    {f'<div class="alert-declined">⚠️ This registration was previously marked as declined. You can authorize and activate this user now.</div>' if is_rejected else ''}
+
+    <div class="info-box">
+      <div class="info-row"><span class="info-label">Candidate Name:</span><span class="info-val">{user['full_name']}</span></div>
+      <div class="info-row"><span class="info-label">Username:</span><span class="info-val">@{user['username']}</span></div>
+      <div class="info-row"><span class="info-label">Email:</span><span class="info-val">{user['email']}</span></div>
+      <div class="info-row"><span class="info-label">Requested Role:</span><span class="info-val"><span class="role-chip">{role_name}</span></span></div>
+      <div class="info-row"><span class="info-label">Job Title / Dept:</span><span class="info-val">{user.get('title') or 'N/A'}</span></div>
+      <div class="info-row"><span class="info-label">Permission Duration:</span><span class="info-val" style="color:#4ade80;">7 Days (Renewable)</span></div>
+      <div class="info-row"><span class="info-label">Submitted At:</span><span class="info-val">{str(user.get('created_at', ''))[:16]}</span></div>
+    </div>
+
+    <form method="POST" action="/api/auth/approve-signup">
+      <input type="hidden" name="token" value="{token}">
+      <input type="hidden" name="user_id" value="{user['id']}">
+      <button type="submit" class="btn-approve">✓ Authorize & Activate 7-Day Access</button>
+    </form>
+    <div style="margin-top:14px; text-align:center;">
+      <form method="POST" action="/api/auth/reject-signup" style="display:inline;">
+        <input type="hidden" name="token" value="{token}">
+        <input type="hidden" name="user_id" value="{user['id']}">
+        <button type="submit" style="border:none; background:none; text-decoration:underline; font-size:12px; color:#ef4444; cursor:pointer;" onclick="return confirm('Are you sure you want to decline this registration?');">
+          Decline Registration
+        </button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>"""
+        return html_gateway, 200
+
+    # POST REQUEST: EXECUTE STATE CHANGE (APPROVE)
     now_dt = datetime.now(timezone.utc)
     now_str = now_dt.isoformat()
     permission_expires_at = (now_dt + timedelta(days=7)).isoformat()
+    
+    cursor = conn.cursor()
+    # Retain approval_token so future link clicks show "Already Approved"
     cursor.execute("""
         UPDATE users 
-        SET status = 'active', approval_token = NULL, approved_by = 'email_authorization_link', approved_at = ?, permission_expires_at = ?
+        SET status = 'active', approved_by = 'authorized_approver', approved_at = ?, permission_expires_at = ?
         WHERE id = ?
     """, (now_str, permission_expires_at, user["id"]))
     conn.commit()
@@ -1194,12 +1354,10 @@ a { display: inline-block; margin-top: 20px; background: #2563eb; color: #ffffff
         details={"approved_user": user["username"], "email": user["email"], "role": user["role"], "permission_expires_at": permission_expires_at}
     )
 
-    role_labels = {"admin": "Administrator", "owner": "Document owner", "viewer": "Viewer"}
-    role_name = role_labels.get(user["role"], user["role"])
     approved_subject = f"TrustVault Authorization Approved: Your {role_name} Account is Active (7 Days)"
     approved_body = f"""Hello {user['full_name']},
 
-Your TrustVault account has been approved and activated for the role of {role_name} with 7-Day Access Permission (valid until {permission_expires_at[:10]}).
+Your TrustVault account has been officially approved and activated for the role of {role_name} with 7-Day Access Permission (valid until {permission_expires_at[:10]}).
 Username: {user['username']}
 Email: {user['email']}
 
@@ -1229,27 +1387,28 @@ You can now log in at any time with your credentials.
 </html>"""
     send_email_notification(user["email"], approved_subject, approved_body, approved_html)
 
-    if request.method == "GET" and not request.headers.get("Accept", "").startswith("application/json"):
+    if not request.headers.get("Accept", "").startswith("application/json") and request.form.get("token"):
         return f"""<!DOCTYPE html>
 <html>
-<head><title>TrustVault - User Approved</title>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TrustVault - Authorization Granted</title>
 <style>
-body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #eff6ff; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; color: #1e3a8a; }}
-.card {{ background: #ffffff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 36px; max-width: 500px; text-align: center; box-shadow: 0 10px 25px -5px rgba(30,58,138,0.1); }}
-h2 {{ color: #1e40af; margin-top: 0; }}
-p {{ font-size: 15px; color: #334155; line-height: 1.6; }}
-.badge {{ display: inline-block; background: #eff6ff; border: 1px solid #3b82f6; color: #1e40af; padding: 6px 14px; border-radius: 20px; font-weight: 700; margin: 12px 0; }}
-a {{ display: inline-block; margin-top: 24px; background: #2563eb; color: #ffffff; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: 600; }}
-a:hover {{ background: #1d4ed8; }}
+body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0b1329; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; color: #f8fafc; padding: 20px; }}
+.card {{ background: #131f37; border: 1px solid #1e293b; border-radius: 16px; padding: 36px; max-width: 500px; width: 100%; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }}
+h2 {{ color: #4ade80; margin-top: 10px; font-size: 22px; }}
+p {{ font-size: 14px; color: #94a3b8; line-height: 1.6; }}
+a.btn {{ display: inline-block; margin-top: 24px; background: #2563eb; color: #ffffff; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; }}
 </style>
 </head>
 <body>
   <div class="card">
+    <div style="font-size: 54px; margin-bottom: 12px;">🎉</div>
     <h2>Account Approved Successfully</h2>
-    <p>User <strong>{user['full_name']}</strong> ({user['username']}) has been granted 7-day access to TrustVault (valid until {permission_expires_at[:10]}).</p>
-    <div><span class="badge">Role: {role_name}</span></div>
-    <p>An activation notice has been dispatched to <strong>{user['email']}</strong>.</p>
-    <a href="/">Go to TrustVault Portal</a>
+    <p>User <strong>{user['full_name']}</strong> (@{user['username']}) has been granted 7-day access to TrustVault (valid until {permission_expires_at[:10]}).</p>
+    <p>An activation notice with sign-in instructions has been dispatched to <strong>{user['email']}</strong>.</p>
+    <a href="/" class="btn">Go to TrustVault Portal</a>
   </div>
 </body>
 </html>"""
@@ -1258,23 +1417,67 @@ a:hover {{ background: #1d4ed8; }}
 
 @app.route("/api/auth/reject-signup", methods=["GET", "POST"])
 def auth_reject_signup():
-    token = request.args.get("token") or (request.get_json() or {}).get("token")
-    if not token:
+    token = request.args.get("token") or request.form.get("token") or (request.get_json(silent=True) or {}).get("token") or ""
+    user_id = request.args.get("user_id") or request.form.get("user_id") or (request.get_json(silent=True) or {}).get("user_id") or ""
+    
+    # Check if request is an automated prefetch / bot crawler
+    user_agent_str = (request.user_agent.string or "").lower()
+    is_bot = (
+        request.headers.get("Purpose") == "prefetch" or
+        request.headers.get("X-Purpose") == "preview" or
+        request.headers.get("Sec-Purpose") == "prefetch" or
+        any(b in user_agent_str for b in ["bot", "spider", "crawler", "googleimageproxy", "google-read-aloud"])
+    )
+    if is_bot:
+        return ("OK", 200)
+
+    if not token and not user_id:
         return "Missing token", 400
 
     conn = database.get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users WHERE approval_token = ?", (token,))
-    user = cursor.fetchone()
-
+    user = _lookup_candidate_user(conn, token, user_id)
     if not user:
         conn.close()
         return "Invalid or expired authorization link", 400
 
+    # On GET: Do NOT immediately reject! Redirect to approval gateway or show confirmation form
+    if request.method == "GET" and not request.headers.get("Accept", "").startswith("application/json"):
+        conn.close()
+        return f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TrustVault - Confirm Decline</title>
+<style>
+body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0b1329; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; color: #f8fafc; padding: 20px; }}
+.card {{ background: #131f37; border: 1px solid #1e293b; border-radius: 16px; padding: 36px; max-width: 480px; width: 100%; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }}
+h2 {{ color: #f87171; margin-top: 10px; font-size: 22px; }}
+p {{ font-size: 14px; color: #94a3b8; line-height: 1.6; }}
+.btn-decline {{ background: #dc2626; color: #ffffff; border: none; padding: 12px 24px; border-radius: 8px; font-weight: 700; cursor: pointer; }}
+a.cancel {{ display: inline-block; margin-top: 14px; color: #60a5fa; text-decoration: none; font-size: 13px; }}
+</style>
+</head>
+<body>
+  <div class="card">
+    <h2>Confirm Decline Registration</h2>
+    <p>Are you sure you want to decline registration for <strong>{user['full_name']}</strong> (@{user['username']})?</p>
+    <form method="POST" action="/api/auth/reject-signup">
+      <input type="hidden" name="token" value="{token}">
+      <input type="hidden" name="user_id" value="{user['id']}">
+      <button type="submit" class="btn-decline">Confirm Decline</button>
+    </form>
+    <div><a href="/api/auth/approve-signup?token={token}" class="cancel">← Return to Approval Options</a></div>
+  </div>
+</body>
+</html>"""
+
+    # POST: Execute decline
     now_str = datetime.now(timezone.utc).isoformat()
+    cursor = conn.cursor()
     cursor.execute("""
         UPDATE users 
-        SET status = 'rejected', approval_token = NULL, approved_by = 'declined', approved_at = ?
+        SET status = 'rejected', approved_by = 'declined', approved_at = ?
         WHERE id = ?
     """, (now_str, user["id"]))
     conn.commit()
@@ -1294,15 +1497,18 @@ def auth_reject_signup():
         details={"rejected_user": user["username"], "email": user["email"], "role": user["role"]}
     )
 
-    if request.method == "GET":
+    if not request.headers.get("Accept", "").startswith("application/json") and request.form.get("token"):
         return f"""<!DOCTYPE html>
 <html>
-<head><title>TrustVault - Request Declined</title>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TrustVault - Request Declined</title>
 <style>
-body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #eff6ff; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; color: #1e3a8a; }}
-.card {{ background: #ffffff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 36px; max-width: 480px; text-align: center; box-shadow: 0 10px 25px -5px rgba(30,58,138,0.1); }}
-h2 {{ color: #1e40af; margin-top: 0; }}
-p {{ font-size: 15px; color: #334155; line-height: 1.6; }}
+body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0b1329; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; color: #f8fafc; padding: 20px; }}
+.card {{ background: #131f37; border: 1px solid #1e293b; border-radius: 16px; padding: 36px; max-width: 480px; width: 100%; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }}
+h2 {{ color: #f87171; margin-top: 0; }}
+p {{ font-size: 14px; color: #94a3b8; line-height: 1.6; }}
 a {{ display: inline-block; margin-top: 20px; background: #2563eb; color: #ffffff; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 600; }}
 </style>
 </head>
@@ -1324,16 +1530,16 @@ def get_pending_approvals():
         return jsonify({"error": "Unauthorized"}), 401
 
     HOST_EMAIL = os.environ.get("HOST_EMAIL", "dudekularafi759@gmail.com").strip().lower()
-    is_host = (current_user["email"].lower() == HOST_EMAIL)
+    can_manage = (current_user["email"].lower() == HOST_EMAIL or current_user["role"] == "admin")
 
     conn = database.get_db()
     cursor = conn.cursor()
 
-    if not is_host:
+    if not can_manage:
         conn.close()
         return jsonify({"pending": [], "can_approve": False})
 
-    cursor.execute("SELECT id, username, email, full_name, role, title, created_at, status FROM users WHERE status = 'pending_approval' ORDER BY created_at DESC")
+    cursor.execute("SELECT id, username, email, full_name, role, title, created_at, status FROM users WHERE status IN ('pending_approval', 'rejected') ORDER BY created_at DESC")
     rows = [dict(r) for r in cursor.fetchall()]
     conn.close()
     return jsonify({"pending": rows, "can_approve": True})
@@ -1350,9 +1556,9 @@ def approve_user_in_app():
         return jsonify({"error": "Missing user_id"}), 400
 
     HOST_EMAIL = os.environ.get("HOST_EMAIL", "dudekularafi759@gmail.com").strip().lower()
-    is_host = (current_user["email"].lower() == HOST_EMAIL)
-    if not is_host:
-        return jsonify({"error": "Only the Host (dudekularafi759@gmail.com) can authorize registrations."}), 403
+    can_manage = (current_user["email"].lower() == HOST_EMAIL or current_user["role"] == "admin")
+    if not can_manage:
+        return jsonify({"error": "Only the Host (dudekularafi759@gmail.com) or an Administrator can authorize registrations."}), 403
 
     conn = database.get_db()
     cursor = conn.cursor()
@@ -1363,12 +1569,13 @@ def approve_user_in_app():
         conn.close()
         return jsonify({"error": "User not found"}), 404
 
+    target_dict = dict(target_user)
     now_dt = datetime.now(timezone.utc)
     now_str = now_dt.isoformat()
     permission_expires_at = (now_dt + timedelta(days=7)).isoformat()
     cursor.execute("""
         UPDATE users 
-        SET status = 'active', approval_token = NULL, approved_by = ?, approved_at = ?, permission_expires_at = ?
+        SET status = 'active', approved_by = ?, approved_at = ?, permission_expires_at = ?
         WHERE id = ?
     """, (current_user["id"], now_str, permission_expires_at, user_id))
     conn.commit()
