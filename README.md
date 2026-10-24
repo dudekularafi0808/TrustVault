@@ -21,7 +21,7 @@ Finally, A Viewer can only access the Document if someone grants them the permis
 
 Everyone have to renovate the registration every 7 days for security purpose.
 
-
+if someone do not use the website app for 10mins after logging in, it will be automatically logged out. For security purpose.
 ---
 
 
