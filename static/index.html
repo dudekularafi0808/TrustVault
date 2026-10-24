@@ -2567,6 +2567,14 @@
         if (submitBtn) submitBtn.disabled = false;
 
         if (res.ok && data.user) {
+          if (!cachedUsers.some(u => u.id === data.user.id || u.username === data.user.username)) {
+            cachedUsers.push(data.user);
+          }
+          if (!localStore.users.some(u => u.id === data.user.id || u.username === data.user.username)) {
+            localStore.users.push(data.user);
+          }
+          populateGrantUserDropdown();
+
           if (data.status === 'pending_approval') {
             closeModal('signUpModal');
             alert(`Registration Submitted Successfully!\n\n${data.message || 'Your request has been submitted and forwarded directly to the Host (dudekularafi759@gmail.com) for authorization. You will receive an email once approved.'}`);
@@ -2958,7 +2966,11 @@
     function populateGrantUserDropdown() {
       const select = document.getElementById('grantUserSelect');
       if (!select) return;
-      select.innerHTML = '<option value="">Select recipient to grant document access...</option>';
+      select.innerHTML = '<option value="">Select registered user to grant document access...</option>';
+      if (!cachedUsers || cachedUsers.length === 0) {
+        select.innerHTML = '<option value="">No other registered users found</option>';
+        return;
+      }
       cachedUsers.forEach(u => {
         if (currentUser && u.id === currentUser.id) return;
         const opt = document.createElement('option');
@@ -2966,16 +2978,17 @@
         
         let powerDesc = '';
         if (u.role === 'viewer') {
-          powerDesc = 'VIEWER (Confidential Read-Only Access)';
+          powerDesc = 'Viewer (Read-Only)';
         } else if (u.role === 'owner') {
-          powerDesc = 'OWNER (Upload & Discretionary Access Control)';
+          powerDesc = 'Document Owner (Upload & Share)';
         } else if (u.role === 'admin') {
-          powerDesc = 'ADMIN (System Governance & Audit Oversight)';
+          powerDesc = 'Administrator (Governance)';
         } else {
-          powerDesc = u.role.toUpperCase();
+          powerDesc = u.role;
         }
 
-        opt.textContent = `${u.full_name} (@${u.username}) — [${powerDesc}] - ${u.title || 'Member'}`;
+        const statusTag = (u.status === 'pending_approval') ? ' [Pending Approval]' : '';
+        opt.textContent = `${u.full_name} (@${u.username}) <${u.email}> — ${powerDesc}${statusTag}`;
         select.appendChild(opt);
       });
     }
@@ -3168,6 +3181,7 @@
     }
 
     async function openDocDetail(docId) {
+      await loadUsers();
       try {
         const res = await fetch(`/api/documents/${docId}`);
         if (res.ok) {
@@ -3205,11 +3219,12 @@
       const permSection = document.getElementById('permissionsManagementSection');
       const isOwner = (currentUser && doc.owner_id === currentUser.id);
       const isAdmin = (currentUser && currentUser.role === 'admin');
+      const canManage = (isOwner || isAdmin);
 
-      if (isOwner || isAdmin) {
+      if (canManage) {
         permSection.style.display = 'block';
         loadUsers();
-        renderPermissionsRoster(doc.permissions || [], isOwner);
+        renderPermissionsRoster(doc.permissions || [], canManage);
       } else {
         permSection.style.display = 'none';
       }
@@ -3217,7 +3232,7 @@
       openModal('docDetailModal');
     }
 
-    function renderPermissionsRoster(perms, isOwner) {
+    function renderPermissionsRoster(perms, canManage) {
       const tbody = document.getElementById('permissionRosterBody');
       tbody.innerHTML = '';
       if (!perms || perms.length === 0) {
@@ -3239,7 +3254,7 @@
           <td><span class="doc-access-chip ${p.access_level}">${p.access_level.toUpperCase()}</span></td>
           <td style="font-size:0.78rem; color:var(--text-dim);">Oct 19, 2026</td>
           <td style="text-align:right;">
-            ${isOwner ? `<button class="btn-danger" style="font-size:0.72rem; padding:4px 8px;" onclick="revokePermission('${p.user_id}', '${escapeHtml(p.full_name)}')">Revoke Access</button>` : '<span style="color:var(--text-dim); font-size:0.75rem;">Locked</span>'}
+            ${canManage ? `<button class="btn-danger" style="font-size:0.72rem; padding:4px 8px;" onclick="revokePermission('${p.user_id}', '${escapeHtml(p.full_name)}')">Revoke Access</button>` : '<span style="color:var(--text-dim); font-size:0.75rem;">Locked</span>'}
           </td>
         `;
         tbody.appendChild(tr);
@@ -3258,22 +3273,31 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ user_id: targetUserId, access_level: accessLevel })
         });
+        const data = await res.json();
         if (res.ok) {
-          alert('Access successfully granted!');
-          openDocDetail(currentActiveDoc.id);
-          loadDocuments();
+          alert(`Access successfully granted! (${accessLevel.toUpperCase()} access)`);
+          await openDocDetail(currentActiveDoc.id);
+          await loadDocuments();
+          return;
+        } else {
+          alert(data.error || 'Failed to grant permission');
           return;
         }
-      } catch (e) {}
+      } catch (e) {
+        console.error('Grant permission error:', e);
+      }
 
       // Client-side fallback
-      const targetUser = localStore.users.find(u => u.id === targetUserId);
-      const existing = currentActiveDoc.permissions.find(p => p.user_id === targetUserId);
-      if (existing) existing.access_level = accessLevel;
-      else currentActiveDoc.permissions.push({ user_id: targetUserId, full_name: targetUser.full_name, email: targetUser.email, access_level: accessLevel });
-      alert(`Granted ${accessLevel.toUpperCase()} to ${targetUser.full_name}`);
-      renderDetailModal(currentActiveDoc);
-      loadDocuments();
+      const targetUser = (cachedUsers && cachedUsers.find(u => u.id === targetUserId)) || (localStore.users && localStore.users.find(u => u.id === targetUserId));
+      if (targetUser) {
+        if (!currentActiveDoc.permissions) currentActiveDoc.permissions = [];
+        const existing = currentActiveDoc.permissions.find(p => p.user_id === targetUserId);
+        if (existing) existing.access_level = accessLevel;
+        else currentActiveDoc.permissions.push({ user_id: targetUserId, full_name: targetUser.full_name, email: targetUser.email, access_level: accessLevel });
+        alert(`Granted ${accessLevel.toUpperCase()} to ${targetUser.full_name}`);
+        renderDetailModal(currentActiveDoc);
+        loadDocuments();
+      }
     }
 
     async function revokePermission(targetUserId, targetUserName) {
@@ -3282,16 +3306,24 @@
 
       try {
         const res = await fetch(`/api/documents/${currentActiveDoc.id}/permissions/${targetUserId}`, { method: 'DELETE' });
+        const data = await res.json();
         if (res.ok) {
-          alert(`ACCESS REVOKED: Access terminated immediately.`);
-          openDocDetail(currentActiveDoc.id);
-          loadDocuments();
+          alert(`ACCESS REVOKED: Access for ${targetUserName} terminated immediately.`);
+          await openDocDetail(currentActiveDoc.id);
+          await loadDocuments();
+          return;
+        } else {
+          alert(data.error || 'Failed to revoke permission');
           return;
         }
-      } catch (e) {}
+      } catch (e) {
+        console.error('Revoke permission error:', e);
+      }
 
       // Client fallback
-      currentActiveDoc.permissions = currentActiveDoc.permissions.filter(p => p.user_id !== targetUserId);
+      if (currentActiveDoc.permissions) {
+        currentActiveDoc.permissions = currentActiveDoc.permissions.filter(p => p.user_id !== targetUserId);
+      }
       alert(`ACCESS REVOKED: All tokens and sessions for ${targetUserName} have been purged.`);
       renderDetailModal(currentActiveDoc);
       loadDocuments();

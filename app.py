@@ -1736,6 +1736,17 @@ def get_document(doc_id):
     doc_dict["user_access_level"] = user_access_level
     doc_dict["permissions"] = permissions
 
+    # Read preview snippet from disk if accessible
+    preview_content = ""
+    full_path = os.path.join(UPLOADS_DIR, doc_dict.get("stored_path", ""))
+    if os.path.exists(full_path):
+        try:
+            with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
+                preview_content = f.read(3000)
+        except Exception:
+            preview_content = "[Encrypted/Binary Document Payload - Use Download to Inspect]"
+    doc_dict["content"] = preview_content or "TRUSTVAULT RESTRICTED CONFIDENTIAL DOCUMENT CONTENT"
+
     database.record_audit_event(
         actor_id=user["id"],
         actor_name=user["full_name"],
@@ -2006,9 +2017,9 @@ def grant_permission(doc_id):
             status="REFUSED",
             ip_address=get_client_ip(),
             user_agent=request.user_agent.string,
-            details={"reason": "User is not the document owner"}
+            details={"reason": "User is neither the document owner nor an administrator"}
         )
-        return jsonify({"error": "Only the document owner can grant permissions"}), 403
+        return jsonify({"error": "Only the document owner or an administrator can grant permissions"}), 403
 
     data = request.get_json() or {}
     target_user_id = data.get("user_id")
@@ -2108,9 +2119,9 @@ def revoke_permission(doc_id, target_user_id):
             status="REFUSED",
             ip_address=get_client_ip(),
             user_agent=request.user_agent.string,
-            details={"reason": "User is not the document owner"}
+            details={"reason": "User is neither the document owner nor an administrator"}
         )
-        return jsonify({"error": "Only the document owner can revoke permissions"}), 403
+        return jsonify({"error": "Only the document owner or an administrator can revoke permissions"}), 403
 
     cursor.execute("SELECT id, full_name FROM users WHERE id = ?", (target_user_id,))
     target_user = cursor.fetchone()
