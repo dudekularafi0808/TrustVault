@@ -1944,7 +1944,7 @@
 
             <div class="form-group">
               <label class="form-label">Username or Email</label>
-              <input type="text" id="loginUsernameInput" style="width:100%" placeholder="e.g. sarah.admin or your registered email" required autocomplete="username">
+              <input type="text" id="loginUsernameInput" style="width:100%" placeholder="e.g. ADMINISTRATOR_DEMO or your registered email" required autocomplete="username">
             </div>
 
             <div class="form-group">
@@ -2066,7 +2066,7 @@
 
               <div class="form-group">
                 <label class="form-label">Registered Email Address or Username</label>
-                <input type="text" id="forgotEmailInput" style="width:100%" placeholder="e.g. sarah.chen@trustvault.internal or sarah.admin" required>
+                <input type="text" id="forgotEmailInput" style="width:100%" placeholder="e.g. admin.demo@trustvault.internal or ADMINISTRATOR_DEMO" required>
               </div>
             </div>
             <div class="modal-footer">
@@ -2341,25 +2341,21 @@
     // Fallback store in case deployed statically on GitHub Pages without Flask server
     const localStore = {
       users: [
-        { id: "usr_admin_1", username: "sarah.admin", email: "sarah.chen@trustvault.internal", full_name: "Sarah Chen", role: "admin", password: "admin123", title: "Head of Information Security & Compliance", avatar_color: "#1e40af" },
-        { id: "usr_owner_1", username: "marcus.vance", email: "marcus.vance@trustvault.internal", full_name: "Marcus Vance", role: "owner", password: "owner123", title: "VP of Commercial Operations", avatar_color: "#0284c7" },
-        { id: "usr_owner_2", username: "dr.thorne", email: "aris.thorne@trustvault.internal", full_name: "Dr. Aris Thorne", role: "owner", password: "owner456", title: "Lead Research Architect", avatar_color: "#2563eb" },
-        { id: "usr_viewer_1", username: "elena.rostova", email: "elena.rostova@external-audit.com", full_name: "Elena Rostova", role: "viewer", password: "viewer123", title: "Senior Regulatory Auditor (KPMG External)", avatar_color: "#d97706" },
-        { id: "usr_viewer_2", username: "david.kim", email: "david.kim@client-corp.com", full_name: "David Kim", role: "viewer", password: "viewer456", title: "Client Procurement Director (Apex Global)", avatar_color: "#4338ca" }
+        { id: "usr_admin_1", username: "ADMINISTRATOR_DEMO", email: "admin.demo@trustvault.internal", full_name: "Administrator Demo", role: "admin", password: "ADMIN1", title: "Head of Information Security & Governance", avatar_color: "#1e40af" },
+        { id: "usr_owner_1", username: "OWNER_DEMO", email: "owner.demo@trustvault.internal", full_name: "Owner Demo", role: "owner", password: "OWNER1", title: "Principal Document Owner", avatar_color: "#0284c7" },
+        { id: "usr_viewer_1", username: "VIEWER_DEMO", email: "viewer.demo@trustvault.internal", full_name: "Viewer Demo", role: "viewer", password: "VIEWER", title: "Regulatory & Compliance Auditor", avatar_color: "#d97706" }
       ],
       resetTokens: [],
       outboundEmails: [],
       docs: [
-        { id: "doc_hr_salary", title: "Q3-2026-Executive-Salary-Review", description: "Executive compensation, bonus structures, and restricted stock grants for leadership.", category: "Executive & HR", filename: "Q3-2026-Executive-Salary-Review.pdf", file_size: 4210, mime_type: "application/pdf", sha256_hash: "a9f8b65278c2e6b189d9e4a3b72c918a93fe84d12c8b74619d0893cbfe8871ab", owner_id: "usr_owner_1", owner_name: "Marcus Vance", created_at: "2026-10-19T09:40:00Z", permissions: [], content: "RESTRICTED EXECUTIVE COMPENSATION DATA - CONFIDENTIAL" },
-        { id: "doc_legal_msa", title: "Master-Service-Agreement-ApexGlobal", description: "Executed bilateral enterprise services contract with Apex Global Procurement.", category: "Contracts & Legal", filename: "Master-Service-Agreement-ApexGlobal.pdf", file_size: 5120, mime_type: "application/pdf", sha256_hash: "7f4c9381ae29b6348ef5d8920bc482a17684d0b13cf74b1239aa87e59cba14de", owner_id: "usr_owner_1", owner_name: "Marcus Vance", created_at: "2026-10-19T10:15:00Z", permissions: [{ id: "perm_1", user_id: "usr_viewer_2", full_name: "David Kim", email: "david.kim@client-corp.com", access_level: "read", granted_at: "2026-10-19T10:15:00Z" }], content: "MASTER SERVICES AGREEMENT - CONTRACT TERMS & SLA OBLIGATIONS" },
-        { id: "doc_eng_drone", title: "Aegis-VII-Hypersonic-Drone-Blueprints", description: "Proprietary aerodynamic calculations, telemetry schemas, and defense specs.", category: "Engineering & Blueprints", filename: "Aegis-VII-Hypersonic-Drone-Blueprints.pdf", file_size: 6180, mime_type: "application/pdf", sha256_hash: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", owner_id: "usr_owner_2", owner_name: "Dr. Aris Thorne", created_at: "2026-10-19T11:00:00Z", permissions: [], content: "ENGINEERING SPECIFICATION & HARDWARE SCHEMATICS - RESTRICTED" },
-        { id: "doc_reg_audit", title: "SOX-Compliance-Audit-Report-2026", description: "Formal regulatory audit findings and compliance verification workpapers.", category: "Regulatory & Audit", filename: "SOX-Compliance-Audit-Report-2026.pdf", file_size: 3890, mime_type: "application/pdf", sha256_hash: "2c7d912b489ef01a73cb941e8f235aa8196cd03e7bb4109823ae910b87541289", owner_id: "usr_owner_1", owner_name: "Marcus Vance", created_at: "2026-10-19T11:20:00Z", permissions: [{ id: "perm_2", user_id: "usr_viewer_1", full_name: "Elena Rostova", email: "elena.rostova@external-audit.com", access_level: "read", granted_at: "2026-10-19T11:20:00Z" }], content: "INDEPENDENT SOX / ISO 27001 AUDIT WORKPAPERS - FINDINGS" }
+        { id: "doc_hr_salary", title: "Q3-2026-Executive-Salary-Review", description: "Executive compensation, bonus structures, and restricted stock grants for leadership.", category: "Executive & HR", filename: "Q3-2026-Executive-Salary-Review.pdf", file_size: 4210, mime_type: "application/pdf", sha256_hash: "a9f8b65278c2e6b189d9e4a3b72c918a93fe84d12c8b74619d0893cbfe8871ab", owner_id: "usr_owner_1", owner_name: "Owner Demo", created_at: "2026-10-19T09:40:00Z", permissions: [], content: "RESTRICTED EXECUTIVE COMPENSATION DATA - CONFIDENTIAL" },
+        { id: "doc_legal_msa", title: "Master-Service-Agreement-ApexGlobal", description: "Executed bilateral enterprise services contract with Apex Global Procurement.", category: "Contracts & Legal", filename: "Master-Service-Agreement-ApexGlobal.pdf", file_size: 5120, mime_type: "application/pdf", sha256_hash: "7f4c9381ae29b6348ef5d8920bc482a17684d0b13cf74b1239aa87e59cba14de", owner_id: "usr_owner_1", owner_name: "Owner Demo", created_at: "2026-10-19T10:15:00Z", permissions: [{ id: "perm_1", user_id: "usr_viewer_1", full_name: "Viewer Demo", email: "viewer.demo@trustvault.internal", access_level: "read", granted_at: "2026-10-19T10:15:00Z" }], content: "MASTER SERVICES AGREEMENT - CONTRACT TERMS & SLA OBLIGATIONS" },
+        { id: "doc_eng_drone", title: "Aegis-VII-Hypersonic-Drone-Blueprints", description: "Proprietary aerodynamic calculations, telemetry schemas, and defense specs.", category: "Engineering & Blueprints", filename: "Aegis-VII-Hypersonic-Drone-Blueprints.pdf", file_size: 6180, mime_type: "application/pdf", sha256_hash: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", owner_id: "usr_owner_1", owner_name: "Owner Demo", created_at: "2026-10-19T11:00:00Z", permissions: [], content: "ENGINEERING SPECIFICATION & HARDWARE SCHEMATICS - RESTRICTED" },
+        { id: "doc_reg_audit", title: "SOX-Compliance-Audit-Report-2026", description: "Formal regulatory audit findings and compliance verification workpapers.", category: "Regulatory & Audit", filename: "SOX-Compliance-Audit-Report-2026.pdf", file_size: 3890, mime_type: "application/pdf", sha256_hash: "2c7d912b489ef01a73cb941e8f235aa8196cd03e7bb4109823ae910b87541289", owner_id: "usr_owner_1", owner_name: "Owner Demo", created_at: "2026-10-19T11:20:00Z", permissions: [{ id: "perm_2", user_id: "usr_viewer_1", full_name: "Viewer Demo", email: "viewer.demo@trustvault.internal", access_level: "read", granted_at: "2026-10-19T11:20:00Z" }], content: "INDEPENDENT SOX / ISO 27001 AUDIT WORKPAPERS - FINDINGS" }
       ],
       audit: [
-        { sequence_id: 1, timestamp: "2026-10-19T09:30:00Z", actor_name: "Sarah Chen", actor_role: "admin", action: "SYSTEM_GENESIS", target_name: "TrustVault Core Ledger", target_type: "SYSTEM", status: "ALLOWED", ip_address: "127.0.0.1", current_hash: "f7bbc540328badd2f2bd51f3a3d5ec6bcdf2b4d494049e7b28f1963c96e4a40a", prev_hash: "0000000000000000000000000000000000000000000000000000000000000000" },
-        { sequence_id: 2, timestamp: "2026-10-19T09:40:00Z", actor_name: "Marcus Vance", actor_role: "owner", action: "DOCUMENT_UPLOAD", target_name: "Q3-2026-Executive-Salary-Review", target_type: "DOCUMENT", status: "ALLOWED", ip_address: "127.0.0.1", current_hash: "8a4f109b83726c91a0efc283941b71239aa87e59cba14def7bbc540328badd2f", prev_hash: "f7bbc540328badd2f2bd51f3a3d5ec6bcdf2b4d494049e7b28f1963c96e4a40a" },
-        { sequence_id: 3, timestamp: "2026-10-19T10:15:00Z", actor_name: "Marcus Vance", actor_role: "owner", action: "PERMISSION_GRANTED", target_name: "Master-Service-Agreement-ApexGlobal", target_type: "DOCUMENT", status: "ALLOWED", ip_address: "127.0.0.1", current_hash: "1b87a93f0c45d67819ab23ce84d9f01a73cb941e8f235aa8196cd03e7bb41098", prev_hash: "8a4f109b83726c91a0efc283941b71239aa87e59cba14def7bbc540328badd2f" },
-        { sequence_id: 4, timestamp: "2026-10-19T10:20:00Z", actor_name: "David Kim", actor_role: "viewer", action: "ACCESS_REFUSED_UNAUTHORIZED", target_name: "Q3-2026-Executive-Salary-Review", target_type: "DOCUMENT", status: "REFUSED", ip_address: "198.51.100.42", current_hash: "63d5c4377e2877414b4516fe2774d1588ff73b732ce5ab1c6c55d03532338da8", prev_hash: "1b87a93f0c45d67819ab23ce84d9f01a73cb941e8f235aa8196cd03e7bb41098" }
+        { sequence_id: 1, timestamp: "2026-10-19T09:30:00Z", actor_name: "Administrator Demo", actor_role: "admin", action: "SYSTEM_GENESIS", target_name: "TrustVault Core Ledger", target_type: "SYSTEM", status: "ALLOWED", ip_address: "127.0.0.1", current_hash: "f7bbc540328badd2f2bd51f3a3d5ec6bcdf2b4d494049e7b28f1963c96e4a40a", prev_hash: "0000000000000000000000000000000000000000000000000000000000000000" },
+        { sequence_id: 2, timestamp: "2026-10-19T09:40:00Z", actor_name: "Owner Demo", actor_role: "owner", action: "DOCUMENT_UPLOAD", target_name: "Q3-2026-Executive-Salary-Review", target_type: "DOCUMENT", status: "ALLOWED", ip_address: "127.0.0.1", current_hash: "8a4f109b83726c91a0efc283941b71239aa87e59cba14def7bbc540328badd2f", prev_hash: "f7bbc540328badd2f2bd51f3a3d5ec6bcdf2b4d494049e7b28f1963c96e4a40a" }
       ]
     };
 
@@ -2430,22 +2426,22 @@
           title: 'Administrator Sign In',
           subtitle: 'Verify governance & audit compliance credentials to access the vault.',
           btn: 'Sign In as Administrator',
-          user: 'sarah.admin',
-          pass: 'admin123'
+          user: 'ADMINISTRATOR_DEMO',
+          pass: 'ADMIN1'
         },
         owner: {
           title: 'Document Owner Sign In',
           subtitle: 'Verify discretionary access & management credentials to access the vault.',
           btn: 'Sign In as Document Owner',
-          user: 'marcus.vance',
-          pass: 'owner123'
+          user: 'OWNER_DEMO',
+          pass: 'OWNER1'
         },
         viewer: {
           title: 'Viewer Sign In',
           subtitle: 'Enter your credentials to inspect granted confidential documents.',
           btn: 'Sign In as Viewer',
-          user: 'elena.rostova',
-          pass: 'viewer123'
+          user: 'VIEWER_DEMO',
+          pass: 'VIEWER'
         }
       };
 
@@ -3317,8 +3313,20 @@
       if (currentActiveDoc) downloadDoc(currentActiveDoc.id);
     }
 
-    function deleteDoc(docId) {
-      if (confirm("Are you sure you want to delete this document?")) {
+    async function deleteDoc(docId) {
+      if (!confirm("Are you sure you want to delete this document?")) return;
+      try {
+        const res = await fetch(`/api/documents/${docId}`, { method: 'DELETE' });
+        if (res.ok) {
+          alert('Document successfully deleted.');
+          await loadDocuments();
+          return;
+        } else {
+          const data = await res.json();
+          alert(data.error || 'Failed to delete document.');
+          return;
+        }
+      } catch (e) {
         localStore.docs = localStore.docs.filter(d => d.id !== docId);
         loadDocuments();
       }
@@ -3362,26 +3370,56 @@
         return;
       }
 
-      const newDoc = {
-        id: "doc_" + Math.random().toString(36).substring(2, 9),
-        title: title || file.name,
-        category: category,
-        description: description,
-        filename: file.name,
-        file_size: file.size,
-        mime_type: file.type || "application/octet-stream",
-        sha256_hash: "a" + Math.random().toString(16).substring(2) + "8b74619d0893cbfe8871ab",
-        owner_id: currentUser.id,
-        owner_name: currentUser.full_name,
-        created_at: new Date().toISOString(),
-        permissions: [],
-        content: "SECURE FILE PAYLOAD PROCESSED & HASHED"
-      };
+      const submitBtn = e.target.querySelector('button[type="submit"]');
+      if (submitBtn) submitBtn.disabled = true;
 
-      localStore.docs.unshift(newDoc);
-      closeModal('uploadModal');
-      alert(`Success: Document '${newDoc.title}' uploaded and cryptographically indexed.`);
-      loadDocuments();
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('title', title || file.name);
+      formData.append('category', category);
+      formData.append('description', description);
+
+      try {
+        const res = await fetch('/api/documents', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (submitBtn) submitBtn.disabled = false;
+
+        if (res.ok) {
+          closeModal('uploadModal');
+          alert(`Success: Document '${title || file.name}' uploaded and stored successfully.`);
+          await loadDocuments();
+          return;
+        } else {
+          document.getElementById('uploadError').textContent = data.error || 'Failed to upload document.';
+          document.getElementById('uploadError').style.display = 'block';
+          return;
+        }
+      } catch (err) {
+        if (submitBtn) submitBtn.disabled = false;
+        console.error('Upload error:', err);
+        const newDoc = {
+          id: "doc_" + Math.random().toString(36).substring(2, 9),
+          title: title || file.name,
+          category: category,
+          description: description,
+          filename: file.name,
+          file_size: file.size,
+          mime_type: file.type || "application/octet-stream",
+          sha256_hash: "a" + Math.random().toString(16).substring(2) + "8b74619d0893cbfe8871ab",
+          owner_id: currentUser.id,
+          owner_name: currentUser.full_name,
+          created_at: new Date().toISOString(),
+          permissions: [],
+          content: "SECURE FILE PAYLOAD PROCESSED & HASHED"
+        };
+        localStore.docs.unshift(newDoc);
+        closeModal('uploadModal');
+        alert(`Success: Document '${newDoc.title}' uploaded locally.`);
+        loadDocuments();
+      }
     }
 
     async function loadAuditTrail() {

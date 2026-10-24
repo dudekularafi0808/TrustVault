@@ -604,20 +604,18 @@ def seed_data_if_empty():
         return
 
     now = datetime.now(timezone.utc).isoformat()
+    perm_expiry = "2099-12-31T23:59:59+00:00"
 
-    # Three primary roles and realistic personas with salted password hashes
+    # Three primary demo personas with specified credentials
     users = [
-        ("usr_admin_1", "sarah.admin", "sarah.chen@trustvault.internal", "Sarah Chen", "admin", hash_password("admin123"), "Head of Information Security & Compliance", "#1e40af", now),
-        ("usr_owner_1", "marcus.vance", "marcus.vance@trustvault.internal", "Marcus Vance", "owner", hash_password("owner123"), "VP of Commercial Operations", "#0284c7", now),
-        ("usr_owner_2", "dr.thorne", "aris.thorne@trustvault.internal", "Dr. Aris Thorne", "owner", hash_password("owner456"), "Lead Research Architect", "#2563eb", now),
-        ("usr_viewer_1", "elena.rostova", "elena.rostova@external-audit.com", "Elena Rostova", "viewer", hash_password("viewer123"), "Senior Regulatory Auditor (KPMG External)", "#d97706", now),
-        ("usr_viewer_2", "david.kim", "david.kim@client-corp.com", "David Kim", "viewer", hash_password("viewer456"), "Client Procurement Director (Apex Global)", "#4338ca", now),
-        ("usr_viewer_3", "priya.nair", "priya.nair@regulatory.gov", "Priya Nair", "viewer", hash_password("viewer789"), "Federal Compliance Officer (SEC)", "#0891b2", now)
+        ("usr_admin_1", "ADMINISTRATOR_DEMO", "admin.demo@trustvault.internal", "Administrator Demo", "admin", hash_password("ADMIN1"), "Head of Information Security & Governance", "#1e40af", now, "active", "system", now, perm_expiry),
+        ("usr_owner_1", "OWNER_DEMO", "owner.demo@trustvault.internal", "Owner Demo", "owner", hash_password("OWNER1"), "Principal Document Owner", "#0284c7", now, "active", "system", now, perm_expiry),
+        ("usr_viewer_1", "VIEWER_DEMO", "viewer.demo@trustvault.internal", "Viewer Demo", "viewer", hash_password("VIEWER"), "Regulatory & Compliance Auditor", "#d97706", now, "active", "system", now, perm_expiry)
     ]
 
     cursor.executemany("""
-        INSERT INTO users (id, username, email, full_name, role, password_hash, title, avatar_color, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO users (id, username, email, full_name, role, password_hash, title, avatar_color, created_at, status, approved_by, approved_at, permission_expires_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, users)
     conn.commit()
     conn.close()
@@ -688,10 +686,10 @@ FINDINGS SUMMARY:
 """.encode("utf-8")
 
     docs = [
-        ("doc_hr_salary", "Q3-2026-Executive-Salary-Review.pdf", "Executive compensation, bonus structures, and restricted stock grants for leadership.", "Executive & HR", doc1_content, "usr_owner_1", "Marcus Vance"),
-        ("doc_legal_msa", "Master-Service-Agreement-ApexGlobal.pdf", "Executed bilateral enterprise services contract with Apex Global Procurement.", "Contracts & Legal", doc2_content, "usr_owner_1", "Marcus Vance"),
-        ("doc_eng_drone", "Aegis-VII-Hypersonic-Drone-Blueprints.pdf", "Proprietary aerodynamic calculations, telemetry schemas, and defense specs.", "Engineering & Blueprints", doc3_content, "usr_owner_2", "Dr. Aris Thorne"),
-        ("doc_reg_audit", "SOX-Compliance-Audit-Report-2026.pdf", "Formal regulatory audit findings and compliance verification workpapers.", "Regulatory & Audit", doc4_content, "usr_owner_1", "Marcus Vance")
+        ("doc_hr_salary", "Q3-2026-Executive-Salary-Review.pdf", "Executive compensation, bonus structures, and restricted stock grants for leadership.", "Executive & HR", doc1_content, "usr_owner_1", "Owner Demo"),
+        ("doc_legal_msa", "Master-Service-Agreement-ApexGlobal.pdf", "Executed bilateral enterprise services contract with Apex Global Procurement.", "Contracts & Legal", doc2_content, "usr_owner_1", "Owner Demo"),
+        ("doc_eng_drone", "Aegis-VII-Hypersonic-Drone-Blueprints.pdf", "Proprietary aerodynamic calculations, telemetry schemas, and defense specs.", "Engineering & Blueprints", doc3_content, "usr_owner_1", "Owner Demo"),
+        ("doc_reg_audit", "SOX-Compliance-Audit-Report-2026.pdf", "Formal regulatory audit findings and compliance verification workpapers.", "Regulatory & Audit", doc4_content, "usr_owner_1", "Owner Demo")
     ]
 
     conn = get_db()
@@ -721,28 +719,27 @@ FINDINGS SUMMARY:
     conn.close()
 
     # Pre-seed realistic permissions:
-    # 1. David Kim (viewer) has READ on Master-Service-Agreement-ApexGlobal
-    # 2. Elena Rostova (viewer) has READ on SOX-Compliance-Audit-Report-2026
-    # 3. Dr. Aris Thorne has not granted ANY access to Q3-2026-Executive-Salary-Review or Aegis-VII Drone
+    # 1. Viewer Demo has READ on Master-Service-Agreement-ApexGlobal
+    # 2. Viewer Demo has READ on SOX-Compliance-Audit-Report-2026
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO permissions (id, document_id, user_id, access_level, granted_by, granted_at)
         VALUES 
-        ('perm_1', 'doc_legal_msa', 'usr_viewer_2', 'read', 'usr_owner_1', ?),
+        ('perm_1', 'doc_legal_msa', 'usr_viewer_1', 'read', 'usr_owner_1', ?),
         ('perm_2', 'doc_reg_audit', 'usr_viewer_1', 'read', 'usr_owner_1', ?)
     """, (now, now))
     conn.commit()
     conn.close()
 
     # Pre-seed genesis block and historical audit trail
-    record_audit_event("usr_admin_1", "Sarah Chen", "admin", "SYSTEM_GENESIS", "SYSTEM", "vault_system", "TrustVault Core Ledger", "ALLOWED", details={"message": "Tamper-evident cryptographically verifiable audit ledger initialized."})
-    record_audit_event("usr_owner_1", "Marcus Vance", "owner", "DOCUMENT_UPLOAD", "DOCUMENT", "doc_hr_salary", "Q3-2026-Executive-Salary-Review", "ALLOWED", details={"file_size": len(doc1_content), "category": "Executive & HR"})
-    record_audit_event("usr_owner_1", "Marcus Vance", "owner", "DOCUMENT_UPLOAD", "DOCUMENT", "doc_legal_msa", "Master-Service-Agreement-ApexGlobal", "ALLOWED", details={"file_size": len(doc2_content), "category": "Contracts & Legal"})
-    record_audit_event("usr_owner_2", "Dr. Aris Thorne", "owner", "DOCUMENT_UPLOAD", "DOCUMENT", "doc_eng_drone", "Aegis-VII-Hypersonic-Drone-Blueprints", "ALLOWED", details={"file_size": len(doc3_content), "category": "Engineering & Blueprints"})
-    record_audit_event("usr_owner_1", "Marcus Vance", "owner", "DOCUMENT_UPLOAD", "DOCUMENT", "doc_reg_audit", "SOX-Compliance-Audit-Report-2026", "ALLOWED", details={"file_size": len(doc4_content), "category": "Regulatory & Audit"})
-    record_audit_event("usr_owner_1", "Marcus Vance", "owner", "PERMISSION_GRANTED", "DOCUMENT", "doc_legal_msa", "Master-Service-Agreement-ApexGlobal", "ALLOWED", details={"granted_to": "David Kim (usr_viewer_2)", "level": "read"})
-    record_audit_event("usr_owner_1", "Marcus Vance", "owner", "PERMISSION_GRANTED", "DOCUMENT", "doc_reg_audit", "SOX-Compliance-Audit-Report-2026", "ALLOWED", details={"granted_to": "Elena Rostova (usr_viewer_1)", "level": "read"})
+    record_audit_event("usr_admin_1", "Administrator Demo", "admin", "SYSTEM_GENESIS", "SYSTEM", "vault_system", "TrustVault Core Ledger", "ALLOWED", details={"message": "Tamper-evident cryptographically verifiable audit ledger initialized."})
+    record_audit_event("usr_owner_1", "Owner Demo", "owner", "DOCUMENT_UPLOAD", "DOCUMENT", "doc_hr_salary", "Q3-2026-Executive-Salary-Review", "ALLOWED", details={"file_size": len(doc1_content), "category": "Executive & HR"})
+    record_audit_event("usr_owner_1", "Owner Demo", "owner", "DOCUMENT_UPLOAD", "DOCUMENT", "doc_legal_msa", "Master-Service-Agreement-ApexGlobal", "ALLOWED", details={"file_size": len(doc2_content), "category": "Contracts & Legal"})
+    record_audit_event("usr_owner_1", "Owner Demo", "owner", "DOCUMENT_UPLOAD", "DOCUMENT", "doc_eng_drone", "Aegis-VII-Hypersonic-Drone-Blueprints", "ALLOWED", details={"file_size": len(doc3_content), "category": "Engineering & Blueprints"})
+    record_audit_event("usr_owner_1", "Owner Demo", "owner", "DOCUMENT_UPLOAD", "DOCUMENT", "doc_reg_audit", "SOX-Compliance-Audit-Report-2026", "ALLOWED", details={"file_size": len(doc4_content), "category": "Regulatory & Audit"})
+    record_audit_event("usr_owner_1", "Owner Demo", "owner", "PERMISSION_GRANTED", "DOCUMENT", "doc_legal_msa", "Master-Service-Agreement-ApexGlobal", "ALLOWED", details={"granted_to": "Viewer Demo (usr_viewer_1)", "level": "read"})
+    record_audit_event("usr_owner_1", "Owner Demo", "owner", "PERMISSION_GRANTED", "DOCUMENT", "doc_reg_audit", "SOX-Compliance-Audit-Report-2026", "ALLOWED", details={"granted_to": "Viewer Demo (usr_viewer_1)", "level": "read"})
     
     # Pre-seed a refusal attempt: Elena Rostova attempted to open Salary Review (Unauthorized) -> Refused!
     record_audit_event("usr_viewer_1", "Elena Rostova", "viewer", "ACCESS_REFUSED_UNAUTHORIZED", "DOCUMENT", "doc_hr_salary", "Q3-2026-Executive-Salary-Review", "REFUSED", ip_address="198.51.100.42", details={"reason": "User not in authorized permission roster", "route": "/api/documents/doc_hr_salary/download", "http_status": 403})

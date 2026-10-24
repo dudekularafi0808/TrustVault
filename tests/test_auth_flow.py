@@ -18,17 +18,17 @@ def main():
     base_url = "http://127.0.0.1:5000"
     
     # 1. Admin login with correct password
-    s, d = post(f"{base_url}/api/auth/login", {"username": "sarah.admin", "password": "admin123", "role": "admin"})
+    s, d = post(f"{base_url}/api/auth/login", {"username": "ADMINISTRATOR_DEMO", "password": "ADMIN1", "role": "admin"})
     assert s == 200, f"Admin login failed: {s} {d}"
-    print("[PASS] 1. Sarah Chen (Administrator) logged in with password:", d["user"]["full_name"])
+    print("[PASS] 1. Administrator Demo logged in with password:", d["user"]["full_name"])
 
     # 2. Login with wrong password
-    s, d = post(f"{base_url}/api/auth/login", {"username": "sarah.admin", "password": "WRONG_PASSWORD", "role": "admin"})
+    s, d = post(f"{base_url}/api/auth/login", {"username": "ADMINISTRATOR_DEMO", "password": "WRONG_PASSWORD", "role": "admin"})
     assert s == 401, f"Expected 401: {s} {d}"
     print("[PASS] 2. Wrong password correctly rejected with 401 and logged as REFUSED:", d["error"])
 
     # 3. Role mismatch check
-    s, d = post(f"{base_url}/api/auth/login", {"username": "sarah.admin", "password": "admin123", "role": "viewer"})
+    s, d = post(f"{base_url}/api/auth/login", {"username": "ADMINISTRATOR_DEMO", "password": "ADMIN1", "role": "viewer"})
     assert s == 403, f"Expected 403: {s} {d}"
     print("[PASS] 3. Role mismatch correctly blocked with 403:", d["error"])
 

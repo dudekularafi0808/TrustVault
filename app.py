@@ -1493,15 +1493,18 @@ def list_documents():
     cursor = conn.cursor()
 
     if user["role"] == "admin":
-        # Admin can audit all active document metadata
+        # Admin can audit all active document metadata, and has full owner controls on documents they upload
         sql = """
             SELECT d.*, 
                    (SELECT COUNT(*) FROM permissions WHERE document_id = d.id) as permissions_count,
-                   'admin_oversight' as user_access_level
+                   CASE 
+                     WHEN d.owner_id = ? THEN 'owner'
+                     ELSE 'admin_oversight'
+                   END as user_access_level
             FROM documents d
             WHERE d.is_deleted = 0
         """
-        params = []
+        params = [user["id"]]
     elif user["role"] == "owner":
         # Owner sees owned docs + docs granted to them
         sql = """
