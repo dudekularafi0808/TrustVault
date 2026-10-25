@@ -404,6 +404,8 @@ function renderDocuments(docs) {
 
     const formattedSize = (doc.file_size / 1024).toFixed(1) + ' KB';
 
+    const canDownload = Boolean(doc.can_download !== undefined ? doc.can_download : (isOwner || isAdmin || accessLevel === 'edit' || accessLevel === 'write'));
+
     card.innerHTML = `
       <div class="doc-card-header">
         <div class="doc-type-icon">${iconChar}</div>
@@ -411,7 +413,7 @@ function renderDocuments(docs) {
           <h4 class="doc-title">${escapeHtml(doc.title)}</h4>
           <span class="doc-category-badge">${escapeHtml(doc.category)}</span>
         </div>
-        <span class="doc-access-chip ${accessLevel}">${accessLevel.replace('_', ' ')}</span>
+        <span class="doc-access-chip ${accessLevel}">${accessLevel === 'read' ? 'READ (IN-PAGE)' : accessLevel.replace('_', ' ')}</span>
       </div>
 
       <p class="doc-description">${escapeHtml(doc.description || 'Confidential document safely vaulted under zero-trust governance.')}</p>
@@ -431,12 +433,18 @@ function renderDocuments(docs) {
       </div>
 
       <div class="doc-card-actions">
-        <button class="btn-secondary" onclick="openDocDetail('${doc.id}')">
-          <span>🔍</span> Inspect
+        <button class="btn-secondary" onclick="openDocDetail('${doc.id}')" style="flex:1;">
+          <span>🔍</span> ${canDownload ? 'Inspect' : 'Read in Page'}
         </button>
-        <button class="btn-primary" onclick="downloadDoc('${doc.id}')">
-          <span>⬇️</span> Download
-        </button>
+        ${canDownload ? `
+          <button class="btn-primary" onclick="downloadDoc('${doc.id}')" style="flex:1;">
+            <span>⬇️</span> Download
+          </button>
+        ` : `
+          <button class="btn-secondary" style="flex:1; opacity:0.7; cursor:pointer;" onclick="alert('Read-Only Permission: You have in-page read access via Inspect. Downloading is restricted unless granted Read & Write access.');" title="Download restricted to Read & Write permission">
+            <span>🔒</span> Read Only
+          </button>
+        `}
         ${isOwner ? `
           <button class="btn-danger" style="flex:0 0 36px; padding:8px;" onclick="deleteDoc('${doc.id}', '${escapeHtml(doc.title)}')" title="Delete Document">
             🗑️
@@ -468,9 +476,27 @@ async function openDocDetail(docId) {
     document.getElementById('detailDocCreated').textContent = new Date(doc.created_at).toLocaleString();
     document.getElementById('detailDocHash').textContent = doc.sha256_hash;
 
+    const isOwner = (currentUser && doc.owner_id === currentUser.id);
+    const isAdmin = (currentUser && currentUser.role === 'admin');
+    const canDownload = Boolean(doc.can_download !== undefined ? doc.can_download : (isOwner || isAdmin || doc.user_access_level === 'edit' || doc.user_access_level === 'write'));
+
     const accessChip = document.getElementById('detailDocYourAccess');
-    accessChip.textContent = doc.user_access_level;
+    const displayLevel = doc.user_access_level === 'read' ? 'READ ONLY (IN-PAGE)' : (doc.user_access_level === 'edit' ? 'READ & WRITE (DOWNLOAD)' : doc.user_access_level);
+    accessChip.textContent = displayLevel;
     accessChip.className = 'doc-access-chip ' + doc.user_access_level;
+
+    const detailDownloadBtn = document.getElementById('detailDownloadBtn');
+    if (detailDownloadBtn) {
+      if (canDownload) {
+        detailDownloadBtn.style.opacity = '1';
+        detailDownloadBtn.title = 'Download Document';
+        detailDownloadBtn.innerHTML = '<span>⬇️</span> Download File';
+      } else {
+        detailDownloadBtn.style.opacity = '0.65';
+        detailDownloadBtn.title = 'Download restricted: Read-Only in-page clearance';
+        detailDownloadBtn.innerHTML = '<span>🔒</span> In-Page Read Only (No Download)';
+      }
+    }
 
     // Load preview content
     loadDocPreview(doc.id, doc.mime_type);
@@ -634,8 +660,36 @@ async function openShareLinkGen() {
   }
 }
 
-function downloadDoc(docId) {
-  window.open(`/api/documents/${docId}/download`, '_blank');
+async function downloadDoc(docId) {
+  try {
+    const res = await fetch(`/api/documents/${docId}/download`);
+    if (res.status === 403) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error || 'Access denied: Download requires Read & Write permission. You have Read-only in-page access.');
+      return;
+    }
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error || 'Failed to download document.');
+      return;
+    }
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    let filename = (currentActiveDoc && currentActiveDoc.filename) || 'document';
+    const disposition = res.headers.get('Content-Disposition');
+    if (disposition && disposition.indexOf('filename=') !== -1) {
+      filename = disposition.split('filename=')[1].replace(/["']/g, '').trim();
+    }
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (err) {
+    window.open(`/api/documents/${docId}/download`, '_blank');
+  }
 }
 
 function downloadCurrentDoc() {

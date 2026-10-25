@@ -11,14 +11,16 @@ Rigorous verification of the Three Non-Negotiable Security Standards:
 """
 
 import os
+os.environ["FORCE_SQLITE"] = "1"
 import io
 import time
 import pytest
 from app import app
 import database
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def client():
+    database.init_db(reset=True)
     app.config["TESTING"] = True
     with app.test_client() as client:
         yield client
@@ -75,8 +77,11 @@ def test_03_refused_attempt_is_recorded_in_audit_ledger(client):
 
 def test_04_owner_grants_access_and_viewer_can_read(client):
     """
-    Workflow: Owner grants Read permission to viewer -> Viewer can now download.
+    Workflow: Owner grants Read Only permission to viewer ->
+    Viewer can read/preview in-page, but cannot download (403 Forbidden).
+    When Owner grants Read & Write ('edit'), Viewer can download.
     """
+    # 1. Grant Read-Only permission
     grant_resp = client.post(
         "/api/documents/doc_eng_drone/permissions",
         headers={"X-User-Id": "usr_owner_1"},
@@ -84,6 +89,25 @@ def test_04_owner_grants_access_and_viewer_can_read(client):
     )
     assert grant_resp.status_code == 200
 
+    # Viewer can read/preview in-page
+    preview_resp = client.get("/api/documents/doc_eng_drone/preview", headers={"X-User-Id": "usr_viewer_1"})
+    assert preview_resp.status_code == 200
+    assert len(preview_resp.data) > 0
+
+    # Viewer CANNOT download with Read-Only permission
+    download_resp = client.get("/api/documents/doc_eng_drone/download", headers={"X-User-Id": "usr_viewer_1"})
+    assert download_resp.status_code == 403
+    assert "Read & Write" in download_resp.get_json()["error"]
+
+    # 2. Upgrade to Read & Write ('edit')
+    grant_edit = client.post(
+        "/api/documents/doc_eng_drone/permissions",
+        headers={"X-User-Id": "usr_owner_1"},
+        json={"user_id": "usr_viewer_1", "access_level": "edit"}
+    )
+    assert grant_edit.status_code == 200
+
+    # Viewer CAN now download
     doc_resp = client.get("/api/documents/doc_eng_drone/download", headers={"X-User-Id": "usr_viewer_1"})
     assert doc_resp.status_code == 200
     assert len(doc_resp.data) > 0
@@ -91,7 +115,7 @@ def test_04_owner_grants_access_and_viewer_can_read(client):
 def test_05_immediate_revocation_works_with_zero_latency(client):
     """
     Standard Three: Taking access away works immediately.
-    Owner revokes permission -> subsequent download fails in the exact same millisecond.
+    Owner revokes permission -> subsequent download and preview fail in the exact same millisecond.
     """
     # 1. Owner revokes Viewer's permission for doc_eng_drone
     revoke_resp = client.delete(
@@ -105,17 +129,21 @@ def test_05_immediate_revocation_works_with_zero_latency(client):
     assert blocked_resp.status_code == 403
     assert "Access denied" in blocked_resp.get_json()["error"]
 
+    # In-page preview is also BLOCKED 403
+    blocked_preview = client.get("/api/documents/doc_eng_drone/preview", headers={"X-User-Id": "usr_viewer_1"})
+    assert blocked_preview.status_code == 403
+
 def test_06_issued_download_tokens_stop_working_instantly_on_revocation(client):
     """
     Standard Three: Whatever you have issued to that person before that moment stops working.
     Even if a shareable download token was generated prior to revocation,
     the moment access is revoked, the token is invalidated and purged.
     """
-    # 1. Grant permission temporarily
+    # 1. Grant Read & Write ('edit') permission temporarily
     client.post(
         "/api/documents/doc_reg_audit/permissions",
         headers={"X-User-Id": "usr_owner_1"},
-        json={"user_id": "usr_viewer_1", "access_level": "read"}
+        json={"user_id": "usr_viewer_1", "access_level": "edit"}
     )
 
     # 2. Generate a token for Viewer
@@ -239,6 +267,7 @@ def execute_all_security_tests():
     ]
 
     results = []
+    database.init_db(reset=True)
     app.config["TESTING"] = True
 
     with app.test_client() as test_client:

@@ -2245,8 +2245,8 @@
                 <option value="">Select user to grant access...</option>
               </select>
               <select id="grantLevelSelect" style="flex:1;">
-                <option value="read">Read Only</option>
-                <option value="edit">Read & Edit</option>
+                <option value="read">Read Only (In-Page View)</option>
+                <option value="edit">Read & Write (Allow Download)</option>
               </select>
               <button class="btn-primary" onclick="submitGrantPermission()">Grant</button>
             </div>
@@ -3335,16 +3335,32 @@
       document.getElementById('detailDocCreated').textContent = new Date().toLocaleString();
       document.getElementById('detailDocHash').textContent = doc.sha256_hash;
 
+      const isOwner = (currentUser && doc.owner_id === currentUser.id);
+      const isAdmin = (currentUser && currentUser.role === 'admin');
+      const canManage = (isOwner || isAdmin);
+      const canDownload = Boolean(doc.can_download !== undefined ? doc.can_download : (canManage || doc.user_access_level === 'edit' || doc.user_access_level === 'write'));
+
       const chip = document.getElementById('detailDocYourAccess');
-      chip.textContent = doc.user_access_level;
-      chip.className = 'doc-access-chip ' + doc.user_access_level;
+      const displayLevel = doc.user_access_level === 'read' ? 'READ ONLY (IN-PAGE)' : (doc.user_access_level === 'edit' ? 'READ & WRITE (DOWNLOAD)' : (doc.user_access_level || 'READ'));
+      chip.textContent = displayLevel;
+      chip.className = 'doc-access-chip ' + (doc.user_access_level || 'read');
+
+      const detailDownloadBtn = document.getElementById('detailDownloadBtn');
+      if (detailDownloadBtn) {
+        if (canDownload) {
+          detailDownloadBtn.style.opacity = '1';
+          detailDownloadBtn.title = 'Download Document';
+          detailDownloadBtn.innerHTML = '<span>⬇️</span> Download File';
+        } else {
+          detailDownloadBtn.style.opacity = '0.65';
+          detailDownloadBtn.title = 'Download restricted: Read-Only in-page clearance';
+          detailDownloadBtn.innerHTML = '<span>🔒</span> In-Page Read Only (No Download)';
+        }
+      }
 
       document.getElementById('previewContainer').textContent = doc.content || "DOCLOCK RESTRICTED CONFIDENTIAL DOCUMENT CONTENT";
 
       const permSection = document.getElementById('permissionsManagementSection');
-      const isOwner = (currentUser && doc.owner_id === currentUser.id);
-      const isAdmin = (currentUser && currentUser.role === 'admin');
-      const canManage = (isOwner || isAdmin);
 
       const deleteBtn = document.getElementById('detailDeleteDocBtn');
       if (deleteBtn) {
@@ -3463,8 +3479,36 @@
       prompt("Revocable Download Link Generated:\n(Tied to live database permissions. If owner revokes access, this link terminates on the spot):", window.location.origin + "/api/shared/download/tok_" + Math.random().toString(36).substring(2));
     }
 
-    function downloadDoc(docId) {
-      window.open(`/api/documents/${docId}/download`, '_blank');
+    async function downloadDoc(docId) {
+      try {
+        const res = await fetch(`/api/documents/${docId}/download`);
+        if (res.status === 403) {
+          const data = await res.json().catch(() => ({}));
+          alert(data.error || 'Access denied: Download requires Read & Write permission. You have Read-only in-page access.');
+          return;
+        }
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          alert(data.error || 'Failed to download document.');
+          return;
+        }
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        let filename = (currentActiveDoc && currentActiveDoc.filename) || 'document';
+        const disposition = res.headers.get('Content-Disposition');
+        if (disposition && disposition.indexOf('filename=') !== -1) {
+          filename = disposition.split('filename=')[1].replace(/["']/g, '').trim();
+        }
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      } catch (err) {
+        window.open(`/api/documents/${docId}/download`, '_blank');
+      }
     }
 
     function downloadCurrentDoc() {

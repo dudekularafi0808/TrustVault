@@ -1,4 +1,5 @@
 import os
+os.environ["FORCE_SQLITE"] = "1"
 import sys
 import unittest
 from datetime import datetime, timezone, timedelta
@@ -10,6 +11,7 @@ import database
 
 class TestInactivityTimeout(unittest.TestCase):
     def setUp(self):
+        database.init_db(reset=True)
         self.client = app.test_client()
         app.config["TESTING"] = True
 

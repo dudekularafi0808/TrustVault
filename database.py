@@ -25,8 +25,8 @@ def _load_env_file():
 
 _load_env_file()
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "").strip() or "postgresql://postgres.lduepqknvpsfjycarevm:Ece%400460___@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres?sslmode=require"
-IS_POSTGRES = DATABASE_URL.startswith("postgresql://") or DATABASE_URL.startswith("postgres://")
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+IS_POSTGRES = bool(os.environ.get("FORCE_SQLITE") != "1" and DATABASE_URL and (DATABASE_URL.startswith("postgresql://") or DATABASE_URL.startswith("postgres://")))
 
 def _normalize_pg_url(url: str) -> str:
     if url.count("@") > 1 and "://" in url:
@@ -602,7 +602,7 @@ def seed_data_if_empty():
     conn = _get_connection()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT COUNT(*) as count FROM users")
+    cursor.execute("SELECT COUNT(*) as count FROM users WHERE id = 'usr_admin_1'")
     if cursor.fetchone()["count"] > 0:
         conn.close()
         return
