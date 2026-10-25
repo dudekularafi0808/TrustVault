@@ -1,5 +1,5 @@
 -- ==============================================================================
--- TRUSTVAULT ZERO-TRUST SECURITY PLATFORM
+-- DOCLOCK ZERO-TRUST SECURITY PLATFORM
 -- POSTGRESQL / SUPABASE / NEON / AWS RDS PRODUCTION DDL SCHEMA
 -- ==============================================================================
 -- Execute this SQL script in your Supabase SQL Editor, Neon Console, or psql

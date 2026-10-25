@@ -27,7 +27,7 @@ def get_smtp_config():
         port = 465
     username = os.environ.get("SMTP_USERNAME", "").strip() or "dudekularafi759@gmail.com"
     password = os.environ.get("SMTP_PASSWORD", "").strip() or "muaqttpqiidemcst"
-    sender = os.environ.get("SMTP_SENDER", "").strip() or f"TrustVault Security <{username}>"
+    sender = os.environ.get("SMTP_SENDER", "").strip() or f"DocLock Security <{username}>"
     use_tls = os.environ.get("SMTP_USE_TLS", "false").lower() in ("true", "1", "yes")
     configured = bool(server and password)
     return {
@@ -105,7 +105,7 @@ def send_email_notification(recipient, subject, text_content, html_content=None,
     return delivered, delivery_msg
 
 app = Flask(__name__, static_folder="static", static_url_path="")
-app.secret_key = "TRUSTVAULT_SESSION_SECRET_KEY_v2026_SECURITY_GRADE"
+app.secret_key = "DOCLOCK_SESSION_SECRET_KEY_v2026_SECURITY_GRADE"
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
 UPLOADS_DIR = database.UPLOADS_DIR
 os.makedirs(UPLOADS_DIR, exist_ok=True)
@@ -293,7 +293,7 @@ def auth_signup():
             "owner": "Authorized Document Owner",
             "viewer": "Confidential Document Viewer"
         }
-        title = role_titles.get(role, "TrustVault Member")
+        title = role_titles.get(role, "DocLock Member")
 
     # Pick role-based theme color
     color_map = {
@@ -356,7 +356,7 @@ def auth_signup():
             details={"email": email, "role": role, "is_host": True}
         )
 
-        welcome_subject = "Welcome Host Administrator to TrustVault"
+        welcome_subject = "Welcome Host Administrator to DocLock"
         welcome_body = f"Welcome {full_name}!\n\nYour Host Administrator account has been provisioned and is active.\nYou can log in and out freely with your credentials."
         send_email_notification(email, welcome_subject, welcome_body)
 
@@ -452,8 +452,8 @@ def auth_signup():
 
     conn.close()
 
-    approval_subject = f"TrustVault Authorization Request: New {role_name} Sign Up ({full_name})"
-    approval_body = f"""TRUSTVAULT ACCESS AUTHORIZATION REQUEST
+    approval_subject = f"DocLock Authorization Request: New {role_name} Sign Up ({full_name})"
+    approval_body = f"""DOCLOCK ACCESS AUTHORIZATION REQUEST
 ==================================================
 A new user has submitted registration requesting the role of {role_name.upper()}.
 
@@ -479,12 +479,12 @@ To REJECT this request, click:
 <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background-color:#eff6ff; color:#0f172a; padding:24px;">
   <div style="max-width:560px; margin:0 auto; background:#ffffff; border:1px solid #bfdbfe; border-radius:12px; overflow:hidden;">
     <div style="background:#1e40af; color:#ffffff; padding:24px; text-align:center;">
-      <h1 style="margin:0; font-size:20px; font-weight:700;">TRUSTVAULT</h1>
+      <h1 style="margin:0; font-size:20px; font-weight:700;">DOCLOCK</h1>
       <p style="margin:6px 0 0; font-size:13px; color:#bfdbfe;">Keep your File Safe and Secure</p>
     </div>
     <div style="padding:28px;">
       <h2 style="font-size:18px; margin-top:0; color:#1e40af;">New Access Authorization Request</h2>
-      <p style="font-size:14px; color:#334155;">A user has registered on TrustVault and requires approval to activate their account as <strong>{role_name}</strong>.</p>
+      <p style="font-size:14px; color:#334155;">A user has registered on DocLock and requires approval to activate their account as <strong>{role_name}</strong>.</p>
       
       <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:16px; margin:20px 0;">
         <table style="width:100%; font-size:13px; color:#334155; line-height:1.8;">
@@ -503,7 +503,7 @@ To REJECT this request, click:
       </div>
     </div>
     <div style="background:#f8fafc; border-top:1px solid #e2e8f0; padding:14px; text-align:center; font-size:12px; color:#64748b;">
-      TrustVault Authorization Engine &bull; Automated Dispatch
+      DocLock Authorization Engine &bull; Automated Dispatch
     </div>
   </div>
 </body>
@@ -516,10 +516,10 @@ To REJECT this request, click:
     # Dispatch receipt confirmation to applicant
     def _dispatch_candidate_notice():
         try:
-            ack_subject = f"TrustVault Registration Received - Pending {role_name} Approval"
+            ack_subject = f"DocLock Registration Received - Pending {role_name} Approval"
             ack_body = f"""Hello {full_name},
 
-Thank you for registering on TrustVault.
+Thank you for registering on DocLock.
 
 Your request for the role of {role_name.upper()} has been received and forwarded to {approver_label} for authorization.
 
@@ -530,7 +530,7 @@ Once approved, you will receive an email confirmation and will be able to log in
 <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background-color:#eff6ff; color:#0f172a; padding:24px;">
   <div style="max-width:540px; margin:0 auto; background:#ffffff; border:1px solid #bfdbfe; border-radius:12px; overflow:hidden;">
     <div style="background:#1e40af; color:#ffffff; padding:24px; text-align:center;">
-      <h1 style="margin:0; font-size:20px; font-weight:700;">TRUSTVAULT</h1>
+      <h1 style="margin:0; font-size:20px; font-weight:700;">DOCLOCK</h1>
       <p style="margin:6px 0 0; font-size:13px; color:#bfdbfe;">Keep your File Safe and Secure</p>
     </div>
     <div style="padding:28px;">
@@ -869,8 +869,8 @@ def auth_forgot_password():
 
     # Construct formal cryptographic reset notice email
     email_id = f"eml_{uuid.uuid4().hex[:10]}"
-    email_subject = "TrustVault Security Alert: Password Reset Verification Code"
-    email_body = f"""TRUSTVAULT INFORMATION SECURITY DISPATCH
+    email_subject = "DocLock Security Alert: Password Reset Verification Code"
+    email_body = f"""DOCLOCK INFORMATION SECURITY DISPATCH
 ==================================================
 CONFIDENTIAL - AUTHORIZED RECIPIENT ONLY
 Date: {now_str}
@@ -879,7 +879,7 @@ Subject: {email_subject}
 
 Hello {user['full_name']},
 
-A password reset request was initiated for your TrustVault identity:
+A password reset request was initiated for your DocLock identity:
 - Username: {user['username']}
 - Assigned Role: {user['role'].upper()}
 
@@ -889,11 +889,11 @@ Your single-use Cryptographic Verification Token is:
 ==================================================
 
 This token will expire in 60 minutes ({expires_str}).
-Enter this token in the TrustVault reset screen along with your new password.
+Enter this token in the DocLock reset screen along with your new password.
 
 SECURITY WARNING:
 If you did not request this password reset, your credentials may be targeted.
-Contact the TrustVault Security Operations Center immediately.
+Contact the DocLock Security Operations Center immediately.
 All password reset requests are recorded in the immutable SHA-256 audit ledger.
 """
 
@@ -909,14 +909,14 @@ All password reset requests are recorded in the immutable SHA-256 audit ledger.
 <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background-color:#f8fafc; color:#0f172a; margin:0; padding:24px;">
   <div style="max-width:560px; margin:0 auto; background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden;">
     <div style="background:#1e40af; color:#ffffff; padding:24px; text-align:center;">
-      <h1 style="margin:0; font-size:20px; font-weight:700;">TRUSTVAULT ZERO-TRUST SECURITY</h1>
+      <h1 style="margin:0; font-size:20px; font-weight:700;">DOCLOCK ZERO-TRUST SECURITY</h1>
       <p style="margin:6px 0 0; font-size:13px; color:#93c5fd;">Cryptographic Access & Identity Management</p>
     </div>
     <div style="padding:32px 28px;">
       <h2 style="font-size:17px; margin-top:0; color:#1e293b;">Password Reset Verification Code</h2>
       <p style="font-size:14px; line-height:1.6; color:#334155;">
         Hello <strong>{user['full_name']}</strong>,<br><br>
-        A password reset request was initiated for your TrustVault identity:
+        A password reset request was initiated for your DocLock identity:
       </p>
       <ul style="font-size:13px; color:#475569; padding-left:20px; line-height:1.8;">
         <li><strong>Username:</strong> {user['username']}</li>
@@ -933,7 +933,7 @@ All password reset requests are recorded in the immutable SHA-256 audit ledger.
       </div>
     </div>
     <div style="background:#f8fafc; border-top:1px solid #e2e8f0; padding:16px; text-align:center; font-size:12px; color:#94a3b8;">
-      TrustVault Security Subsystem &bull; Automated Dispatch &bull; Do Not Reply
+      DocLock Security Subsystem &bull; Automated Dispatch &bull; Do Not Reply
     </div>
   </div>
 </body>
@@ -1116,19 +1116,19 @@ def auth_test_email():
             }
         }), 400
 
-    test_subject = "TrustVault SMTP Diagnostics: Real Mailbox Connectivity Verified"
-    test_body = f"""TRUSTVAULT SMTP VERIFICATION DISPATCH
+    test_subject = "DocLock SMTP Diagnostics: Real Mailbox Connectivity Verified"
+    test_body = f"""DOCLOCK SMTP VERIFICATION DISPATCH
 ==================================================
 Timestamp: {datetime.now(timezone.utc).isoformat()}
 Recipient: {recipient}
 SMTP Server: {cfg['server']}:{cfg['port']}
 
-SUCCESS: Your TrustVault installation is properly connected to your email service!
+SUCCESS: Your DocLock installation is properly connected to your email service!
 All password reset tokens and security alerts will now be delivered directly to real user inboxes.
 """
     test_html = f"""<div style="font-family:sans-serif; max-width:520px; padding:24px; border:1px solid #3b82f6; border-radius:8px; background:#ffffff;">
 <div style="background:#1e40af; color:#ffffff; padding:12px 16px; border-radius:6px; font-weight:700; margin-bottom:16px;">
-  TRUSTVAULT ZERO-TRUST: SMTP CONNECTIVITY VERIFIED
+  DOCLOCK ZERO-TRUST: SMTP CONNECTIVITY VERIFIED
 </div>
 <h3 style="color:#0f172a; margin-top:0;">Real Mailbox Delivery Operational</h3>
 <p style="color:#334155; font-size:14px;">Your mail service connection is active and successfully authenticated.</p>
@@ -1210,7 +1210,7 @@ def auth_approve_signup():
         conn.close()
         html_unrecognized = """<!DOCTYPE html>
 <html>
-<head><title>TrustVault - Authorization Notice</title>
+<head><title>DocLock - Authorization Notice</title>
 <style>
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0b1329; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; color: #f8fafc; padding: 20px; }
 .card { background: #131f37; border: 1px solid #1e293b; border-radius: 14px; padding: 36px; max-width: 480px; text-align: center; box-shadow: 0 15px 30px rgba(0,0,0,0.5); }
@@ -1222,8 +1222,8 @@ a { display: inline-block; margin-top: 20px; background: #2563eb; color: #ffffff
 <body>
   <div class="card">
     <h2>Authorization Token Not Found</h2>
-    <p>This approval link could not be matched with an active registration record. Please log into the TrustVault portal to view and manage pending registrations directly.</p>
-    <a href="/">Go to TrustVault Portal</a>
+    <p>This approval link could not be matched with an active registration record. Please log into the DocLock portal to view and manage pending registrations directly.</p>
+    <a href="/">Go to DocLock Portal</a>
   </div>
 </body>
 </html>"""
@@ -1243,7 +1243,7 @@ a { display: inline-block; margin-top: 20px; background: #2563eb; color: #ffffff
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TrustVault - Account Already Approved</title>
+<title>DocLock - Account Already Approved</title>
 <style>
 body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0b1329; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; color: #f8fafc; padding: 20px; }}
 .card {{ background: #131f37; border: 1px solid #1e293b; border-radius: 16px; padding: 36px; max-width: 520px; width: 100%; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }}
@@ -1270,7 +1270,7 @@ a.btn {{ display: inline-block; margin-top: 20px; background: #2563eb; color: #f
       <div class="info-row"><span class="info-label">Assigned Role:</span><span class="info-val">{role_name}</span></div>
       <div class="info-row"><span class="info-label">Permission Expiry:</span><span class="info-val" style="color:#4ade80;">{exp_date}</span></div>
     </div>
-    <a href="/" class="btn">Go to TrustVault Portal</a>
+    <a href="/" class="btn">Go to DocLock Portal</a>
   </div>
 </body>
 </html>"""
@@ -1288,7 +1288,7 @@ a.btn {{ display: inline-block; margin-top: 20px; background: #2563eb; color: #f
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TrustVault - Authorize Registration</title>
+  <title>DocLock - Authorize Registration</title>
   <style>
     body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0b1329; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; color: #f8fafc; padding: 20px; }}
     .card {{ background: #131f37; border: 1px solid #1e3a8a; border-radius: 16px; padding: 36px; max-width: 520px; width: 100%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7); }}
@@ -1310,7 +1310,7 @@ a.btn {{ display: inline-block; margin-top: 20px; background: #2563eb; color: #f
 <body>
   <div class="card">
     <div class="header">
-      <span class="logo-badge">TrustVault Security</span>
+      <span class="logo-badge">DocLock Security</span>
       <h2>Access Authorization Request</h2>
       <p class="sub">Review registration details and authorize access.</p>
     </div>
@@ -1375,10 +1375,10 @@ a.btn {{ display: inline-block; margin-top: 20px; background: #2563eb; color: #f
         details={"approved_user": user["username"], "email": user["email"], "role": user["role"], "permission_expires_at": permission_expires_at}
     )
 
-    approved_subject = f"TrustVault Authorization Approved: Your {role_name} Account is Active (7 Days)"
+    approved_subject = f"DocLock Authorization Approved: Your {role_name} Account is Active (7 Days)"
     approved_body = f"""Hello {user['full_name']},
 
-Your TrustVault account has been officially approved and activated for the role of {role_name} with 7-Day Access Permission (valid until {permission_expires_at[:10]}).
+Your DocLock account has been officially approved and activated for the role of {role_name} with 7-Day Access Permission (valid until {permission_expires_at[:10]}).
 Username: {user['username']}
 Email: {user['email']}
 
@@ -1389,7 +1389,7 @@ You can now log in at any time with your credentials.
 <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background-color:#eff6ff; color:#0f172a; padding:24px;">
   <div style="max-width:540px; margin:0 auto; background:#ffffff; border:1px solid #bfdbfe; border-radius:12px; overflow:hidden;">
     <div style="background:#1e40af; color:#ffffff; padding:24px; text-align:center;">
-      <h1 style="margin:0; font-size:20px; font-weight:700;">TRUSTVAULT</h1>
+      <h1 style="margin:0; font-size:20px; font-weight:700;">DOCLOCK</h1>
       <p style="margin:6px 0 0; font-size:13px; color:#bfdbfe;">Keep your File Safe and Secure</p>
     </div>
     <div style="padding:28px;">
@@ -1414,7 +1414,7 @@ You can now log in at any time with your credentials.
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TrustVault - Authorization Granted</title>
+<title>DocLock - Authorization Granted</title>
 <style>
 body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0b1329; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; color: #f8fafc; padding: 20px; }}
 .card {{ background: #131f37; border: 1px solid #1e293b; border-radius: 16px; padding: 36px; max-width: 500px; width: 100%; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }}
@@ -1427,9 +1427,9 @@ a.btn {{ display: inline-block; margin-top: 24px; background: #2563eb; color: #f
   <div class="card">
     <div style="font-size: 54px; margin-bottom: 12px;">🎉</div>
     <h2>Account Approved Successfully</h2>
-    <p>User <strong>{user['full_name']}</strong> (@{user['username']}) has been granted 7-day access to TrustVault (valid until {permission_expires_at[:10]}).</p>
+    <p>User <strong>{user['full_name']}</strong> (@{user['username']}) has been granted 7-day access to DocLock (valid until {permission_expires_at[:10]}).</p>
     <p>An activation notice with sign-in instructions has been dispatched to <strong>{user['email']}</strong>.</p>
-    <a href="/" class="btn">Go to TrustVault Portal</a>
+    <a href="/" class="btn">Go to DocLock Portal</a>
   </div>
 </body>
 </html>"""
@@ -1469,7 +1469,7 @@ def auth_reject_signup():
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TrustVault - Confirm Decline</title>
+<title>DocLock - Confirm Decline</title>
 <style>
 body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0b1329; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; color: #f8fafc; padding: 20px; }}
 .card {{ background: #131f37; border: 1px solid #1e293b; border-radius: 16px; padding: 36px; max-width: 480px; width: 100%; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }}
@@ -1524,7 +1524,7 @@ a.cancel {{ display: inline-block; margin-top: 14px; color: #60a5fa; text-decora
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TrustVault - Request Declined</title>
+<title>DocLock - Request Declined</title>
 <style>
 body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0b1329; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; color: #f8fafc; padding: 20px; }}
 .card {{ background: #131f37; border: 1px solid #1e293b; border-radius: 16px; padding: 36px; max-width: 480px; width: 100%; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }}
@@ -1537,7 +1537,7 @@ a {{ display: inline-block; margin-top: 20px; background: #2563eb; color: #fffff
   <div class="card">
     <h2>Registration Declined</h2>
     <p>The account request for <strong>{user['full_name']}</strong> ({user['username']}) has been declined and recorded in the audit ledger.</p>
-    <a href="/">Go to TrustVault Portal</a>
+    <a href="/">Go to DocLock Portal</a>
   </div>
 </body>
 </html>"""
@@ -1618,8 +1618,8 @@ def approve_user_in_app():
 
     role_labels = {"admin": "Administrator", "owner": "Document owner", "viewer": "Viewer"}
     role_name = role_labels.get(target_user["role"], target_user["role"])
-    approved_subject = f"TrustVault Authorization Approved: Your {role_name} Account is Active (7 Days)"
-    approved_body = f"Hello {target_user['full_name']},\n\nYour TrustVault account has been approved by {current_user['full_name']} with 7-Day Access Permission (valid until {permission_expires_at[:10]}). You can now log in at any time with your credentials."
+    approved_subject = f"DocLock Authorization Approved: Your {role_name} Account is Active (7 Days)"
+    approved_body = f"Hello {target_user['full_name']},\n\nYour DocLock account has been approved by {current_user['full_name']} with 7-Day Access Permission (valid until {permission_expires_at[:10]}). You can now log in at any time with your credentials."
     send_email_notification(target_user["email"], approved_subject, approved_body)
 
     return jsonify({"success": True, "message": f"User {target_user['username']} ({role_name}) approved successfully with 7-day access.", "permission_expires_at": permission_expires_at})
@@ -1982,7 +1982,7 @@ def get_document(doc_id):
                     preview_content = f.read(3000)
             except Exception:
                 preview_content = "[Encrypted/Binary Document Payload - Use Download to Inspect]"
-    doc_dict["content"] = preview_content or f"TRUSTVAULT RESTRICTED CONFIDENTIAL DOCUMENT CONTENT: {doc_dict['title']} ({doc_dict['filename']})"
+    doc_dict["content"] = preview_content or f"DOCLOCK RESTRICTED CONFIDENTIAL DOCUMENT CONTENT: {doc_dict['title']} ({doc_dict['filename']})"
     doc_dict.pop("file_data", None) # Keep JSON metadata response lean
 
     database.record_audit_event(
@@ -2056,7 +2056,7 @@ def download_document(doc_id):
     # 3. Graceful fallback for legacy records missing on serverless disk
     if not file_bytes:
         fallback_content = (
-            f"TRUSTVAULT CONFIDENTIAL DOCUMENT VAULT\n"
+            f"DOCLOCK CONFIDENTIAL DOCUMENT VAULT\n"
             f"=====================================\n"
             f"Title: {doc['title']}\n"
             f"Filename: {doc['filename']}\n"
@@ -2065,7 +2065,7 @@ def download_document(doc_id):
             f"SHA-256 Digest: {doc.get('sha256_hash', 'N/A')}\n"
             f"Upload Timestamp: {doc.get('created_at', '')}\n"
             f"Authorized Clearance: {user['role'].upper()}\n\n"
-            f"[Zero-Trust Authenticated Document Payload - Verified by TrustVault Kernel]\n"
+            f"[Zero-Trust Authenticated Document Payload - Verified by DocLock Kernel]\n"
         )
         file_bytes = fallback_content.encode("utf-8")
 
@@ -2135,7 +2135,7 @@ def preview_document(doc_id):
             file_bytes = None
 
     if not file_bytes:
-        fallback_content = f"TRUSTVAULT IN-BROWSER PREVIEW\nTitle: {doc['title']}\nFilename: {doc['filename']}\n"
+        fallback_content = f"DOCLOCK IN-BROWSER PREVIEW\nTitle: {doc['title']}\nFilename: {doc['filename']}\n"
         file_bytes = fallback_content.encode("utf-8")
 
     database.record_audit_event(
@@ -2565,7 +2565,7 @@ def download_by_token(token):
         except Exception:
             file_bytes = None
     if not file_bytes:
-        file_bytes = f"TRUSTVAULT SECURE TOKEN PAYLOAD: {t_dict['doc_title']}\nFilename: {t_dict['filename']}\n".encode("utf-8")
+        file_bytes = f"DOCLOCK SECURE TOKEN PAYLOAD: {t_dict['doc_title']}\nFilename: {t_dict['filename']}\n".encode("utf-8")
 
     database.record_audit_event(
         actor_id=t_dict["user_id"],
@@ -2753,7 +2753,7 @@ def get_security_spec():
     Returns the formal security architecture and non-negotiable guarantees.
     """
     spec = {
-        "title": "TrustVault Security Architecture & Formal RBAC Specification",
+        "title": "DocLock Security Architecture & Formal RBAC Specification",
         "roles": [
             {
                 "role": "Administrator",
@@ -2831,5 +2831,5 @@ def run_live_tests():
 
 if __name__ == "__main__":
     database.init_db(reset=False)
-    print("TrustVault server launching on http://0.0.0.0:5000 (Local: http://localhost:5000, Network: http://10.106.102.213:5000)")
+    print("DocLock server launching on http://0.0.0.0:5000 (Local: http://localhost:5000, Network: http://10.106.102.213:5000)")
     app.run(host="0.0.0.0", port=5000, debug=False)

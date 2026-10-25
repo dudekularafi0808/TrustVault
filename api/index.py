@@ -24,7 +24,7 @@ if not os.environ.get("SMTP_USERNAME"):
 if not os.environ.get("SMTP_PASSWORD"):
     os.environ["SMTP_PASSWORD"] = "muaqttpqiidemcst"
 if not os.environ.get("SMTP_SENDER"):
-    os.environ["SMTP_SENDER"] = "TrustVault Security <dudekularafi759@gmail.com>"
+    os.environ["SMTP_SENDER"] = "DocLock Security <dudekularafi759@gmail.com>"
 if not os.environ.get("SMTP_USE_TLS"):
     os.environ["SMTP_USE_TLS"] = "false"
 

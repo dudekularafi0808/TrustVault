@@ -1,5 +1,5 @@
 /**
- * TrustVault Client Application Logic
+ * DocLock Client Application Logic
  * Cryptographically Verifiable Zero-Trust Document Vault
  */
 
@@ -44,7 +44,7 @@ let inactivityListenersAttached = false;
 function recordUserActivity() {
   lastUserActivityTime = Date.now();
   try {
-    localStorage.setItem('trustvault_last_activity', lastUserActivityTime.toString());
+    localStorage.setItem('doclock_last_activity', lastUserActivityTime.toString());
   } catch (e) {}
 }
 
@@ -85,7 +85,7 @@ async function checkInactivityTimeout() {
   const now = Date.now();
   let effectiveLast = lastUserActivityTime;
   try {
-    const stored = localStorage.getItem('trustvault_last_activity');
+    const stored = localStorage.getItem('doclock_last_activity') || localStorage.getItem('trustvault_last_activity');
     if (stored) {
       const parsed = parseInt(stored, 10);
       if (!isNaN(parsed) && parsed > effectiveLast) {
@@ -103,7 +103,7 @@ async function checkInactivityTimeout() {
 async function triggerInactivityLogout() {
   stopInactivityTimer();
   try {
-    localStorage.removeItem('trustvault_last_activity');
+    localStorage.removeItem('doclock_last_activity');
   } catch (e) {}
 
   try {
@@ -158,7 +158,7 @@ async function loginAsRole(role) {
       alert(data.error || 'Login failed');
     }
   } catch (err) {
-    alert('Failed to connect to TrustVault server: ' + err.message);
+    alert('Failed to connect to DocLock server: ' + err.message);
   }
 }
 
@@ -185,7 +185,7 @@ async function loginAsUser(userId) {
 async function logout() {
   stopInactivityTimer();
   try {
-    localStorage.removeItem('trustvault_last_activity');
+    localStorage.removeItem('doclock_last_activity');
     await fetch('/api/auth/logout', { method: 'POST' });
   } catch (err) {
     console.error('Logout error:', err);
@@ -844,7 +844,7 @@ async function verifyLedgerIntegrity() {
 }
 
 async function simulateCovertTampering() {
-  if (!confirm('This demonstration tool will covertly modify a historical audit block in SQLite to demonstrate how TrustVault mathematically detects offline log tampering. Proceed?')) {
+  if (!confirm('This demonstration tool will covertly modify a historical audit block in SQLite to demonstrate how DocLock mathematically detects offline log tampering. Proceed?')) {
     return;
   }
 
@@ -956,7 +956,7 @@ async function openSpecModal() {
     let html = `
       <h3 style="color:var(--text-main); font-size:1.15rem; margin-bottom:12px;">${spec.title}</h3>
       <p style="color:var(--text-muted); margin-bottom:18px;">
-        TrustVault implements zero-trust authorization where the server decides every single request, audit events are chained into a cryptographic ledger, and permission revocation operates with zero latency.
+        DocLock implements zero-trust authorization where the server decides every single request, audit events are chained into a cryptographic ledger, and permission revocation operates with zero latency.
       </p>
 
       <h4 style="color:var(--accent-blue); margin:16px 0 8px;">Role Capabilities & Separation of Duties</h4>

@@ -149,10 +149,12 @@ if os.environ.get("DATABASE_PATH"):
     DB_PATH = os.environ.get("DATABASE_PATH")
     UPLOADS_DIR = os.environ.get("UPLOADS_DIR") or os.path.join(os.path.dirname(DB_PATH), "uploads")
 elif os.environ.get("VERCEL"):
-    DB_PATH = "/tmp/trustvault.db"
+    DB_PATH = "/tmp/doclock.db"
     UPLOADS_DIR = "/tmp/uploads"
 else:
-    DB_PATH = os.path.join(os.path.dirname(__file__), "trustvault.db")
+    default_doclock = os.path.join(os.path.dirname(__file__), "doclock.db")
+    legacy_tv = os.path.join(os.path.dirname(__file__), "trustvault.db")
+    DB_PATH = default_doclock if os.path.exists(default_doclock) or not os.path.exists(legacy_tv) else legacy_tv
     UPLOADS_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 
 VAULT_HMAC_KEY = b"TRUSTVAULT_IMMUTABLE_AUDIT_SECRET_KEY_v2026_DEEPMIND"
@@ -610,9 +612,9 @@ def seed_data_if_empty():
 
     # Three primary demo personas with specified credentials
     users = [
-        ("usr_admin_1", "ADMINISTRATOR_DEMO", "admin.demo@trustvault.internal", "Administrator Demo", "admin", hash_password("ADMIN1"), "Head of Information Security & Governance", "#1e40af", now, "active", "system", now, perm_expiry),
-        ("usr_owner_1", "OWNER_DEMO", "owner.demo@trustvault.internal", "Owner Demo", "owner", hash_password("OWNER1"), "Principal Document Owner", "#0284c7", now, "active", "system", now, perm_expiry),
-        ("usr_viewer_1", "VIEWER_DEMO", "viewer.demo@trustvault.internal", "Viewer Demo", "viewer", hash_password("VIEWER"), "Regulatory & Compliance Auditor", "#d97706", now, "active", "system", now, perm_expiry)
+        ("usr_admin_1", "ADMINISTRATOR_DEMO", "admin.demo@doclock.internal", "Administrator Demo", "admin", hash_password("ADMIN1"), "Head of Information Security & Governance", "#1e40af", now, "active", "system", now, perm_expiry),
+        ("usr_owner_1", "OWNER_DEMO", "owner.demo@doclock.internal", "Owner Demo", "owner", hash_password("OWNER1"), "Principal Document Owner", "#0284c7", now, "active", "system", now, perm_expiry),
+        ("usr_viewer_1", "VIEWER_DEMO", "viewer.demo@doclock.internal", "Viewer Demo", "viewer", hash_password("VIEWER"), "Regulatory & Compliance Auditor", "#d97706", now, "active", "system", now, perm_expiry)
     ]
 
     cursor.executemany("""
@@ -627,7 +629,7 @@ def seed_data_if_empty():
     os.makedirs(uploads_dir, exist_ok=True)
 
     # Document 1: Salary Review (HR Confidential)
-    doc1_content = """TRUSTVAULT CONFIDENTIAL HR MEMORANDUM
+    doc1_content = """DOCLOCK CONFIDENTIAL HR MEMORANDUM
 ==================================================
 DOCUMENT REF: HR-2026-SAL-EXEC-09
 CLASSIFICATION: RESTRICTED - EXECUTIVE EYES ONLY
@@ -647,7 +649,7 @@ Access attempts are cryptographically timestamped and audited.
     doc2_content = """MASTER SERVICES AGREEMENT (MSA)
 ==================================================
 CONTRACT ID: MSA-2026-APEX-049
-PARTIES: TrustVault Systems Inc. & Apex Global Partners (Attn: David Kim)
+PARTIES: DocLock Systems Inc. & Apex Global Partners (Attn: David Kim)
 DATE OF EXECUTION: October 12, 2026
 
 TERMS OF ENGAGEMENT:
@@ -735,7 +737,7 @@ FINDINGS SUMMARY:
     conn.close()
 
     # Pre-seed genesis block and historical audit trail
-    record_audit_event("usr_admin_1", "Administrator Demo", "admin", "SYSTEM_GENESIS", "SYSTEM", "vault_system", "TrustVault Core Ledger", "ALLOWED", details={"message": "Tamper-evident cryptographically verifiable audit ledger initialized."})
+    record_audit_event("usr_admin_1", "Administrator Demo", "admin", "SYSTEM_GENESIS", "SYSTEM", "vault_system", "DocLock Core Ledger", "ALLOWED", details={"message": "Tamper-evident cryptographically verifiable audit ledger initialized."})
     record_audit_event("usr_owner_1", "Owner Demo", "owner", "DOCUMENT_UPLOAD", "DOCUMENT", "doc_hr_salary", "Q3-2026-Executive-Salary-Review", "ALLOWED", details={"file_size": len(doc1_content), "category": "Executive & HR"})
     record_audit_event("usr_owner_1", "Owner Demo", "owner", "DOCUMENT_UPLOAD", "DOCUMENT", "doc_legal_msa", "Master-Service-Agreement-ApexGlobal", "ALLOWED", details={"file_size": len(doc2_content), "category": "Contracts & Legal"})
     record_audit_event("usr_owner_1", "Owner Demo", "owner", "DOCUMENT_UPLOAD", "DOCUMENT", "doc_eng_drone", "Aegis-VII-Hypersonic-Drone-Blueprints", "ALLOWED", details={"file_size": len(doc3_content), "category": "Engineering & Blueprints"})
@@ -748,4 +750,4 @@ FINDINGS SUMMARY:
 
 if __name__ == "__main__":
     init_db(reset=True)
-    print("TrustVault database initialized and pre-seeded successfully.")
+    print("DocLock database initialized and pre-seeded successfully.")

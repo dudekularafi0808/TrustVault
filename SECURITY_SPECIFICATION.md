@@ -1,4 +1,4 @@
-# TrustVault — Security Architecture & Formal Specification
+# DocLock — Security Architecture & Formal Specification
 
 > **Platform Mission:** A zero-compromise cryptographic document security platform where the wrong person cannot reach a document, and where you can mathematically prove exactly who reached it, who attempted to reach it, and when.
 
@@ -20,7 +20,7 @@ Confidential document sharing suffers from two catastrophic and expensive failur
 
 ## 2. Formal Role-Based Access Control (RBAC) Specification
 
-TrustVault implements a formal access control model with strict separation of duties.
+DocLock implements a formal access control model with strict separation of duties.
 
 | Capability / Action | Administrator | Document Owner | Viewer (Read) | Viewer (Edit) |
 | :--- | :---: | :---: | :---: | :---: |
@@ -85,7 +85,7 @@ TrustVault implements a formal access control model with strict separation of du
 > *"You can prove who reached it. Afterwards, from the record, including the attempts that were refused. An audit trail that can be quietly altered is not evidence, and we will ask you what stops that."*
 
 #### Architectural Guarantee:
-TrustVault implements an **append-only, cryptographically hash-chained audit ledger** modeled on blockchain primitives:
+DocLock implements an **append-only, cryptographically hash-chained audit ledger** modeled on blockchain primitives:
 
 1. **Hash Chaining:**
    - Every audit record contains `prev_hash` (the SHA-256 hash of the immediately preceding record) and its own `current_hash`:

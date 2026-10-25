@@ -1,4 +1,4 @@
-# TrustVault — Keep your File Safe and Secure
+# DocLock — Keep your File Safe and Secure
 
 FOR DEMO THE
 ADMINISTRATOR LOGIN: 
@@ -12,7 +12,7 @@ VIEWER LOGIN:
         Password : VIEWER
 **"Keep your File Safe and Secure. Permit and revoke the Access Whenever, whomever you want."**
 
-TrustVault is a zero-compromise confidential document security platform where unauthorized entities cannot reach a document, and where you can mathematically prove exactly who accessed it, who attempted to access it, and when.
+DocLock is a zero-compromise confidential document security platform where unauthorized entities cannot reach a document, and where you can mathematically prove exactly who accessed it, who attempted to access it, and when.
 
 Firstly, there is a host in the top end. Host has all the permissions access, everything. Host is the one who approves the request for any Sign up. The host is me at present.
 Secondly, Administrator is the one who takes the approval to sign up as ADMIN. Admin can upload document and grant access to anyone read or write etc. 
@@ -28,7 +28,7 @@ if someone do not use the website app for 10mins after logging in, it will be au
 ##  Project Structure
 
 ```
-trustvault/
+doclock/
 ├── app.py                      # Flask web server, auth endpoints, & SMTP delivery
 ├── database.py                 # SQLite WAL engine & SHA-256 hash-chained audit ledger
 ├── schema_postgres.sql         # Production DDL schema for PostgreSQL / Supabase / Neon
